@@ -95,6 +95,11 @@ button {
   color: #17201d;
 }
 
+.nested-form {
+  display: grid;
+  gap: 15px;
+}
+
 label {
   display: grid;
   gap: 6px;
@@ -112,6 +117,29 @@ select {
   background: white;
   min-height: 42px;
   padding: 0 12px;
+}
+
+.password-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-box input {
+  padding-right: 46px;
+}
+
+.password-box button {
+  position: absolute;
+  right: 6px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: #eef3ef;
+  color: #26312e;
 }
 
 .segmented,
@@ -176,6 +204,23 @@ select {
   margin: 0;
   color: #a73535;
   font-weight: 800;
+}
+
+.notice {
+  margin: 0;
+  color: #1f7a6f;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.link-button {
+  width: fit-content;
+  border: 0;
+  background: transparent;
+  color: #1f7a6f;
+  padding: 0;
+  font-weight: 900;
+  text-align: left;
 }
 
 .app-shell {

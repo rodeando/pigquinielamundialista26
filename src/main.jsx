@@ -6,8 +6,11 @@ import {
   Check,
   ChevronDown,
   Eye,
+  EyeOff,
+  KeyRound,
   Lock,
   LogOut,
+  Mail,
   Search,
   ShieldCheck,
   Trophy,
@@ -32,6 +35,7 @@ const PICKS_KEY = 'quiniela2026:picks';
 const RESULTS_KEY = 'quiniela2026:results';
 const UNLOCK_KEY = 'quiniela2026:unlocked-phase';
 const NOTIFIED_KEY = 'quiniela2026:notified-phases';
+const RESET_KEY = 'quiniela2026:password-reset';
 const NOTIFICATION_HOURS_BEFORE = 24;
 
 const readStorage = (key, fallback) => {
@@ -186,6 +190,9 @@ function App() {
   const [unlockedOrder, setUnlockedOrder] = useState(() => readStorage(UNLOCK_KEY, 1));
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
+  const [authNotice, setAuthNotice] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [resetRequest, setResetRequest] = useState(() => readStorage(RESET_KEY, null));
   const [query, setQuery] = useState('');
   const [stage, setStage] = useState('Todos');
   const [activeTab, setActiveTab] = useState('quiniela');
@@ -316,15 +323,67 @@ function App() {
       saveUsers(nextUsers);
       saveSession({ email });
       setAuthError('');
+      setAuthNotice('');
       return;
     }
 
     if (!existingUser || existingUser.password !== password) {
       setAuthError('Correo o contrasena incorrectos.');
+      setAuthNotice('');
       return;
     }
     saveSession({ email });
     setAuthError('');
+    setAuthNotice('');
+  };
+
+  const handleForgotPassword = (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const email = normalizeEmail(form.get('resetEmail') ?? '');
+    const existingUser = users.find((user) => user.email === email);
+
+    if (!existingUser) {
+      setAuthError('No encontramos una cuenta con ese correo.');
+      setAuthNotice('');
+      return;
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const nextReset = { email, code };
+    setResetRequest(nextReset);
+    writeStorage(RESET_KEY, nextReset);
+    setAuthError('');
+    setAuthNotice(`Codigo de recuperacion generado: ${code}. En produccion este codigo se enviaria por correo.`);
+  };
+
+  const handleResetPassword = (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const code = String(form.get('resetCode') ?? '').trim();
+    const password = String(form.get('newPassword') ?? '');
+
+    if (!resetRequest || code !== resetRequest.code) {
+      setAuthError('Codigo de recuperacion incorrecto.');
+      setAuthNotice('');
+      return;
+    }
+
+    if (password.length < 6) {
+      setAuthError('La nueva contrasena debe tener al menos 6 caracteres.');
+      setAuthNotice('');
+      return;
+    }
+
+    const nextUsers = users.map((user) =>
+      user.email === resetRequest.email ? { ...user, password } : user,
+    );
+    saveUsers(nextUsers);
+    setResetRequest(null);
+    writeStorage(RESET_KEY, null);
+    setAuthMode('login');
+    setAuthError('');
+    setAuthNotice('Contrasena actualizada. Ya puedes iniciar sesion.');
   };
 
   const updatePick = (matchId, patch) => {
@@ -374,43 +433,87 @@ function App() {
             <img className="auth-mascot" src={pigMascot} alt="Mascota de Pig Quiniela Mundialista 26" />
           </div>
 
-          <form className="auth-form" onSubmit={handleAuth}>
+          <div className="auth-form">
             <div className="segmented">
               <button
                 type="button"
                 className={authMode === 'login' ? 'active' : ''}
-                onClick={() => setAuthMode('login')}
+                onClick={() => {
+                  setAuthMode('login');
+                  setAuthError('');
+                  setAuthNotice('');
+                }}
               >
                 Entrar
               </button>
               <button
                 type="button"
                 className={authMode === 'register' ? 'active' : ''}
-                onClick={() => setAuthMode('register')}
+                onClick={() => {
+                  setAuthMode('register');
+                  setAuthError('');
+                  setAuthNotice('');
+                }}
               >
                 Registro
               </button>
             </div>
-            {authMode === 'register' && (
-              <label>
-                Nombre
-                <input name="name" autoComplete="name" />
-              </label>
+            {authMode === 'forgot' ? (
+              <ForgotPasswordForm
+                authError={authError}
+                authNotice={authNotice}
+                resetRequest={resetRequest}
+                showPassword={showPassword}
+                setShowPassword={setShowPassword}
+                onRequest={handleForgotPassword}
+                onReset={handleResetPassword}
+                onBack={() => {
+                  setAuthMode('login');
+                  setAuthError('');
+                  setAuthNotice('');
+                }}
+              />
+            ) : (
+              <form className="nested-form" onSubmit={handleAuth}>
+                {authMode === 'register' && (
+                  <label>
+                    Nombre
+                    <input name="name" autoComplete="name" />
+                  </label>
+                )}
+                <label>
+                  Correo
+                  <input name="email" type="email" autoComplete="email" />
+                </label>
+                <PasswordField
+                  name="password"
+                  label="Contrasena"
+                  autoComplete={authMode === 'register' ? 'new-password' : 'current-password'}
+                  showPassword={showPassword}
+                  setShowPassword={setShowPassword}
+                />
+                {authError && <p className="error">{authError}</p>}
+                {authNotice && <p className="notice">{authNotice}</p>}
+                <button className="primary" type="submit">
+                  {authMode === 'register' ? <UserPlus size={18} /> : <ShieldCheck size={18} />}
+                  {authMode === 'register' ? 'Crear cuenta' : 'Iniciar sesion'}
+                </button>
+                {authMode === 'login' && (
+                  <button
+                    className="link-button"
+                    type="button"
+                    onClick={() => {
+                      setAuthMode('forgot');
+                      setAuthError('');
+                      setAuthNotice('');
+                    }}
+                  >
+                    No recuerdo mi contrasena
+                  </button>
+                )}
+              </form>
             )}
-            <label>
-              Correo
-              <input name="email" type="email" autoComplete="email" />
-            </label>
-            <label>
-              Contrasena
-              <input name="password" type="password" autoComplete="current-password" />
-            </label>
-            {authError && <p className="error">{authError}</p>}
-            <button className="primary" type="submit">
-              {authMode === 'register' ? <UserPlus size={18} /> : <ShieldCheck size={18} />}
-              {authMode === 'register' ? 'Crear cuenta' : 'Iniciar sesion'}
-            </button>
-          </form>
+          </div>
         </section>
       </main>
     );
@@ -544,6 +647,78 @@ function App() {
         </>
       )}
     </main>
+  );
+}
+
+function PasswordField({ name, label, autoComplete, showPassword, setShowPassword }) {
+  return (
+    <label>
+      {label}
+      <div className="password-box">
+        <input
+          name={name}
+          type={showPassword ? 'text' : 'password'}
+          autoComplete={autoComplete}
+        />
+        <button
+          type="button"
+          aria-label={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+          onClick={() => setShowPassword((value) => !value)}
+        >
+          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+        </button>
+      </div>
+    </label>
+  );
+}
+
+function ForgotPasswordForm({
+  authError,
+  authNotice,
+  resetRequest,
+  showPassword,
+  setShowPassword,
+  onRequest,
+  onReset,
+  onBack,
+}) {
+  return (
+    <>
+      <form className="nested-form" onSubmit={onRequest}>
+        <label>
+          Correo registrado
+          <input name="resetEmail" type="email" defaultValue={resetRequest?.email ?? ''} autoComplete="email" />
+        </label>
+        <button className="primary" type="submit">
+          <Mail size={18} />
+          Enviar codigo
+        </button>
+      </form>
+      {resetRequest && (
+        <form className="nested-form" onSubmit={onReset}>
+          <label>
+            Codigo de recuperacion
+            <input name="resetCode" inputMode="numeric" />
+          </label>
+          <PasswordField
+            name="newPassword"
+            label="Nueva contrasena"
+            autoComplete="new-password"
+            showPassword={showPassword}
+            setShowPassword={setShowPassword}
+          />
+          <button className="primary" type="submit">
+            <KeyRound size={18} />
+            Cambiar contrasena
+          </button>
+        </form>
+      )}
+      {authError && <p className="error">{authError}</p>}
+      {authNotice && <p className="notice">{authNotice}</p>}
+      <button className="link-button" type="button" onClick={onBack}>
+        Volver a iniciar sesion
+      </button>
+    </>
   );
 }
 
