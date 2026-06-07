@@ -252,6 +252,13 @@ select {
   margin-bottom: 18px;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -329,6 +336,14 @@ select {
   gap: 10px;
   align-items: end;
   width: min(480px, 100%);
+}
+
+.account-password-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  width: min(760px, 100%);
 }
 
 .toolbar {
@@ -660,6 +675,14 @@ select {
     flex-direction: column;
   }
 
+  .topbar-actions {
+    width: 100%;
+  }
+
+  .topbar-actions .icon-text {
+    flex: 1;
+  }
+
   .tabs {
     width: 100%;
   }
@@ -669,6 +692,10 @@ select {
   }
 
   .all-pick-row {
+    grid-template-columns: 1fr;
+  }
+
+  .account-password-form {
     grid-template-columns: 1fr;
   }
 

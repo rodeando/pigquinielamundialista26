@@ -30,7 +30,6 @@ import pigMascot from './assets/pig-mascot.png';
 import { isSupabaseConfigured, supabase } from './supabaseClient.js';
 import './styles.css';
 
-const SESSION_KEY = 'quiniela2026:session';
 const NOTIFIED_KEY = 'quiniela2026:notified-phases';
 const NOTIFICATION_HOURS_BEFORE = 24;
 
@@ -193,6 +192,9 @@ function App() {
   const [stage, setStage] = useState('Todos');
   const [activeTab, setActiveTab] = useState('quiniela');
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const [showAccountPanel, setShowAccountPanel] = useState(false);
+  const [accountError, setAccountError] = useState('');
+  const [accountNotice, setAccountNotice] = useState('');
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     () => typeof Notification !== 'undefined' && Notification.permission === 'granted',
   );
@@ -400,7 +402,7 @@ function App() {
     const email = normalizeEmail(form.get('resetEmail') ?? '');
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
+      redirectTo: `${window.location.origin}?reset_password=true`,
     });
 
     if (error) {
@@ -432,6 +434,36 @@ function App() {
     setIsPasswordRecovery(false);
     setAuthError('');
     setAuthNotice('Contrasena actualizada.');
+  };
+
+  const handleChangePassword = async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const password = String(form.get('accountPassword') ?? '');
+    const confirmPassword = String(form.get('accountPasswordConfirm') ?? '');
+
+    if (password.length < 6) {
+      setAccountError('La nueva contrasena debe tener al menos 6 caracteres.');
+      setAccountNotice('');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setAccountError('Las contrasenas no coinciden.');
+      setAccountNotice('');
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      setAccountError(error.message);
+      setAccountNotice('');
+      return;
+    }
+
+    event.currentTarget.reset();
+    setAccountError('');
+    setAccountNotice('Contrasena guardada correctamente.');
   };
 
   const updatePick = async (matchId, patch) => {
@@ -619,10 +651,24 @@ function App() {
           <p className="eyebrow">Pig Quiniela Mundialista 26</p>
           <h1>Hola, {currentUser.name}</h1>
         </div>
-        <button className="icon-text ghost" onClick={() => supabase.auth.signOut()}>
-          <LogOut size={18} />
-          Salir
-        </button>
+        <div className="topbar-actions">
+          <button
+            className="icon-text ghost"
+            type="button"
+            onClick={() => {
+              setShowAccountPanel((value) => !value);
+              setAccountError('');
+              setAccountNotice('');
+            }}
+          >
+            <KeyRound size={18} />
+            Cuenta
+          </button>
+          <button className="icon-text ghost" onClick={() => supabase.auth.signOut()}>
+            <LogOut size={18} />
+            Salir
+          </button>
+        </div>
       </header>
 
       <section className="stats-grid">
@@ -651,6 +697,37 @@ function App() {
             </button>
           </form>
           {authError && <p className="error">{authError}</p>}
+        </section>
+      )}
+
+      {showAccountPanel && (
+        <section className="phase-panel">
+          <div>
+            <p className="eyebrow">Cuenta</p>
+            <h2>Guardar nueva contrasena</h2>
+          </div>
+          <form className="account-password-form" onSubmit={handleChangePassword}>
+            <PasswordField
+              name="accountPassword"
+              label="Nueva contrasena"
+              autoComplete="new-password"
+              showPassword={showPassword}
+              setShowPassword={setShowPassword}
+            />
+            <PasswordField
+              name="accountPasswordConfirm"
+              label="Confirmar contrasena"
+              autoComplete="new-password"
+              showPassword={showPassword}
+              setShowPassword={setShowPassword}
+            />
+            <button className="primary" type="submit">
+              <KeyRound size={18} />
+              Guardar
+            </button>
+          </form>
+          {accountError && <p className="error">{accountError}</p>}
+          {accountNotice && <p className="notice">{accountNotice}</p>}
         </section>
       )}
 
