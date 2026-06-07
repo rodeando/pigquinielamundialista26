@@ -27,15 +27,11 @@ import {
 } from 'recharts';
 import { MATCHES } from './matches.js';
 import pigMascot from './assets/pig-mascot.png';
+import { isSupabaseConfigured, supabase } from './supabaseClient.js';
 import './styles.css';
 
-const USERS_KEY = 'quiniela2026:users';
 const SESSION_KEY = 'quiniela2026:session';
-const PICKS_KEY = 'quiniela2026:picks';
-const RESULTS_KEY = 'quiniela2026:results';
-const UNLOCK_KEY = 'quiniela2026:unlocked-phase';
 const NOTIFIED_KEY = 'quiniela2026:notified-phases';
-const RESET_KEY = 'quiniela2026:password-reset';
 const NOTIFICATION_HOURS_BEFORE = 24;
 
 const readStorage = (key, fallback) => {
@@ -183,24 +179,56 @@ const phaseStarts = unlockPhases.map((phase) => {
 });
 
 function App() {
-  const [users, setUsers] = useState(() => readStorage(USERS_KEY, []));
-  const [session, setSession] = useState(() => readStorage(SESSION_KEY, null));
-  const [picks, setPicks] = useState(() => readStorage(PICKS_KEY, {}));
-  const [results, setResults] = useState(() => readStorage(RESULTS_KEY, {}));
-  const [unlockedOrder, setUnlockedOrder] = useState(() => readStorage(UNLOCK_KEY, 1));
+  const [users, setUsers] = useState([]);
+  const [session, setSession] = useState(null);
+  const [picks, setPicks] = useState({});
+  const [results, setResults] = useState({});
+  const [unlockedOrder, setUnlockedOrder] = useState(1);
+  const [isLoading, setIsLoading] = useState(isSupabaseConfigured);
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
   const [authNotice, setAuthNotice] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [resetRequest, setResetRequest] = useState(() => readStorage(RESET_KEY, null));
   const [query, setQuery] = useState('');
   const [stage, setStage] = useState('Todos');
   const [activeTab, setActiveTab] = useState('quiniela');
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     () => typeof Notification !== 'undefined' && Notification.permission === 'granted',
   );
 
-  const currentUser = users.find((user) => user.email === session?.email);
+  const currentUser = users.find((user) => user.id === session?.user?.id);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setIsLoading(false);
+      setAuthError('Faltan VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY.');
+      return undefined;
+    }
+
+    const loadSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session);
+      if (data.session) await loadAppData();
+      setIsLoading(false);
+    };
+
+    loadSession();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession(nextSession);
+      setIsPasswordRecovery(event === 'PASSWORD_RECOVERY');
+      if (nextSession) {
+        loadAppData();
+      } else {
+        setUsers([]);
+        setPicks({});
+        setResults({});
+      }
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (!currentUser || !notificationsEnabled || typeof Notification === 'undefined') return undefined;
@@ -270,29 +298,50 @@ function App() {
     });
   }, [query, stage]);
 
-  const saveUsers = (nextUsers) => {
+  const loadAppData = async () => {
+    const [{ data: profiles }, { data: pickRows }, { data: resultRows }, { data: settingRows }] = await Promise.all([
+      supabase.from('profiles').select('id,email,name').order('name'),
+      supabase.from('picks').select('user_id,match_id,outcome,home_score,away_score'),
+      supabase.from('results').select('match_id,home_score,away_score'),
+      supabase.from('app_settings').select('key,value').eq('key', 'unlocked_phase').limit(1),
+    ]);
+
+    const nextUsers = profiles ?? [];
+    const usersById = Object.fromEntries(nextUsers.map((user) => [user.id, user]));
+    const nextPicks = {};
+
+    for (const row of pickRows ?? []) {
+      const user = usersById[row.user_id];
+      if (!user) continue;
+      nextPicks[user.email] ??= {};
+      nextPicks[user.email][row.match_id] = {
+        outcome: row.outcome,
+        homeScore: row.home_score ?? '',
+        awayScore: row.away_score ?? '',
+      };
+    }
+
+    const nextResults = {};
+    for (const row of resultRows ?? []) {
+      nextResults[row.match_id] = {
+        homeScore: row.home_score ?? '',
+        awayScore: row.away_score ?? '',
+      };
+    }
+
     setUsers(nextUsers);
-    writeStorage(USERS_KEY, nextUsers);
-  };
-
-  const saveSession = (nextSession) => {
-    setSession(nextSession);
-    writeStorage(SESSION_KEY, nextSession);
-  };
-
-  const savePicks = (nextPicks) => {
     setPicks(nextPicks);
-    writeStorage(PICKS_KEY, nextPicks);
-  };
-
-  const saveResults = (nextResults) => {
     setResults(nextResults);
-    writeStorage(RESULTS_KEY, nextResults);
+    setUnlockedOrder(Number(settingRows?.[0]?.value ?? 1));
   };
 
-  const saveUnlockedOrder = (nextOrder) => {
+  const saveUnlockedOrder = async (nextOrder) => {
     setUnlockedOrder(nextOrder);
-    writeStorage(UNLOCK_KEY, nextOrder);
+    await supabase.from('app_settings').upsert({
+      key: 'unlocked_phase',
+      value: nextOrder,
+      updated_at: new Date().toISOString(),
+    });
   };
 
   const enableNotifications = async () => {
@@ -301,7 +350,7 @@ function App() {
     setNotificationsEnabled(permission === 'granted');
   };
 
-  const handleAuth = (event) => {
+  const handleAuth = async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const email = normalizeEmail(form.get('email') ?? '');
@@ -313,80 +362,79 @@ function App() {
       return;
     }
 
-    const existingUser = users.find((user) => user.email === email);
     if (authMode === 'register') {
-      if (existingUser) {
-        setAuthError('Ese correo ya esta registrado.');
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { name },
+          emailRedirectTo: window.location.origin,
+        },
+      });
+
+      if (error) {
+        setAuthError(error.message);
+        setAuthNotice('');
         return;
       }
-      const nextUsers = [...users, { email, password, name }];
-      saveUsers(nextUsers);
-      saveSession({ email });
+
+      if (data.session) await loadAppData();
       setAuthError('');
-      setAuthNotice('');
+      setAuthNotice(data.session ? '' : 'Cuenta creada. Revisa tu correo para confirmar el registro.');
       return;
     }
 
-    if (!existingUser || existingUser.password !== password) {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
       setAuthError('Correo o contrasena incorrectos.');
       setAuthNotice('');
       return;
     }
-    saveSession({ email });
     setAuthError('');
     setAuthNotice('');
   };
 
-  const handleForgotPassword = (event) => {
+  const handleForgotPassword = async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const email = normalizeEmail(form.get('resetEmail') ?? '');
-    const existingUser = users.find((user) => user.email === email);
 
-    if (!existingUser) {
-      setAuthError('No encontramos una cuenta con ese correo.');
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+
+    if (error) {
+      setAuthError(error.message);
       setAuthNotice('');
       return;
     }
 
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    const nextReset = { email, code };
-    setResetRequest(nextReset);
-    writeStorage(RESET_KEY, nextReset);
     setAuthError('');
-    setAuthNotice(`Codigo de recuperacion generado: ${code}. En produccion este codigo se enviaria por correo.`);
+    setAuthNotice('Te enviamos un correo para recuperar tu contrasena.');
   };
 
-  const handleResetPassword = (event) => {
+  const handleUpdateRecoveredPassword = async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const code = String(form.get('resetCode') ?? '').trim();
-    const password = String(form.get('newPassword') ?? '');
-
-    if (!resetRequest || code !== resetRequest.code) {
-      setAuthError('Codigo de recuperacion incorrecto.');
-      setAuthNotice('');
-      return;
-    }
+    const password = String(form.get('recoveredPassword') ?? '');
 
     if (password.length < 6) {
       setAuthError('La nueva contrasena debe tener al menos 6 caracteres.');
-      setAuthNotice('');
       return;
     }
 
-    const nextUsers = users.map((user) =>
-      user.email === resetRequest.email ? { ...user, password } : user,
-    );
-    saveUsers(nextUsers);
-    setResetRequest(null);
-    writeStorage(RESET_KEY, null);
-    setAuthMode('login');
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      setAuthError(error.message);
+      return;
+    }
+
+    setIsPasswordRecovery(false);
     setAuthError('');
-    setAuthNotice('Contrasena actualizada. Ya puedes iniciar sesion.');
+    setAuthNotice('Contrasena actualizada.');
   };
 
-  const updatePick = (matchId, patch) => {
+  const updatePick = async (matchId, patch) => {
     const match = MATCHES.find((item) => item.id === matchId);
     if (!match || getMatchUnlockOrder(match) > unlockedOrder || hasMatchStarted(match)) return;
     const current = picks[currentUser.email]?.[matchId] ?? {};
@@ -395,22 +443,40 @@ function App() {
       const outcome = getOutcome(nextPick.homeScore, nextPick.awayScore);
       if (outcome) nextPick.outcome = outcome;
     }
-    savePicks({
+    const nextPicks = {
       ...picks,
       [currentUser.email]: {
         ...(picks[currentUser.email] ?? {}),
         [matchId]: nextPick,
       },
+    };
+    setPicks(nextPicks);
+
+    await supabase.from('picks').upsert({
+      user_id: currentUser.id,
+      match_id: matchId,
+      outcome: nextPick.outcome,
+      home_score: nextPick.homeScore === '' || nextPick.homeScore === undefined ? null : Number(nextPick.homeScore),
+      away_score: nextPick.awayScore === '' || nextPick.awayScore === undefined ? null : Number(nextPick.awayScore),
+      updated_at: new Date().toISOString(),
     });
   };
 
-  const updateResult = (matchId, patch) => {
-    saveResults({
+  const updateResult = async (matchId, patch) => {
+    const nextResult = {
+      ...(results[matchId] ?? {}),
+      ...patch,
+    };
+    setResults({
       ...results,
-      [matchId]: {
-        ...(results[matchId] ?? {}),
-        ...patch,
-      },
+      [matchId]: nextResult,
+    });
+
+    await supabase.from('results').upsert({
+      match_id: matchId,
+      home_score: nextResult.homeScore === '' || nextResult.homeScore === undefined ? null : Number(nextResult.homeScore),
+      away_score: nextResult.awayScore === '' || nextResult.awayScore === undefined ? null : Number(nextResult.awayScore),
+      updated_at: new Date().toISOString(),
     });
   };
 
@@ -419,6 +485,36 @@ function App() {
   const userPoints = leaderboard.find((item) => item.email === currentUser?.email)?.points ?? 0;
   const unlockedMatches = MATCHES.filter((match) => getMatchUnlockOrder(match) <= unlockedOrder).length;
   const currentPhase = unlockPhases.find((phase) => phase.order === unlockedOrder)?.label ?? 'Jornada 1 grupos';
+
+  if (isLoading) {
+    return (
+      <main className="auth-page">
+        <section className="auth-panel single">
+          <div>
+            <p className="eyebrow">Pig Quiniela Mundialista 26</p>
+            <h1>Cargando</h1>
+            <p className="auth-copy">Conectando con Supabase.</p>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (!isSupabaseConfigured) {
+    return (
+      <main className="auth-page">
+        <section className="auth-panel single">
+          <div>
+            <p className="eyebrow">Configuracion</p>
+            <h1>Falta Supabase</h1>
+            <p className="auth-copy">
+              Agrega VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en tu archivo .env.local y en Vercel.
+            </p>
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   if (!currentUser) {
     return (
@@ -462,11 +558,7 @@ function App() {
               <ForgotPasswordForm
                 authError={authError}
                 authNotice={authNotice}
-                resetRequest={resetRequest}
-                showPassword={showPassword}
-                setShowPassword={setShowPassword}
                 onRequest={handleForgotPassword}
-                onReset={handleResetPassword}
                 onBack={() => {
                   setAuthMode('login');
                   setAuthError('');
@@ -527,7 +619,7 @@ function App() {
           <p className="eyebrow">Pig Quiniela Mundialista 26</p>
           <h1>Hola, {currentUser.name}</h1>
         </div>
-        <button className="icon-text ghost" onClick={() => saveSession(null)}>
+        <button className="icon-text ghost" onClick={() => supabase.auth.signOut()}>
           <LogOut size={18} />
           Salir
         </button>
@@ -538,6 +630,29 @@ function App() {
         <Metric icon={<BarChart3 />} label="Posicion" value={userPosition || '-'} />
         <Metric icon={<Check />} label="Pronosticos" value={`${userPickCount}/${unlockedMatches}`} />
       </section>
+
+      {isPasswordRecovery && (
+        <section className="phase-panel">
+          <div>
+            <p className="eyebrow">Recuperacion</p>
+            <h2>Crea tu nueva contrasena</h2>
+          </div>
+          <form className="recovery-inline" onSubmit={handleUpdateRecoveredPassword}>
+            <PasswordField
+              name="recoveredPassword"
+              label="Nueva contrasena"
+              autoComplete="new-password"
+              showPassword={showPassword}
+              setShowPassword={setShowPassword}
+            />
+            <button className="primary" type="submit">
+              <KeyRound size={18} />
+              Guardar
+            </button>
+          </form>
+          {authError && <p className="error">{authError}</p>}
+        </section>
+      )}
 
       <nav className="tabs">
         <button className={activeTab === 'quiniela' ? 'active' : ''} onClick={() => setActiveTab('quiniela')}>
@@ -675,11 +790,7 @@ function PasswordField({ name, label, autoComplete, showPassword, setShowPasswor
 function ForgotPasswordForm({
   authError,
   authNotice,
-  resetRequest,
-  showPassword,
-  setShowPassword,
   onRequest,
-  onReset,
   onBack,
 }) {
   return (
@@ -687,32 +798,13 @@ function ForgotPasswordForm({
       <form className="nested-form" onSubmit={onRequest}>
         <label>
           Correo registrado
-          <input name="resetEmail" type="email" defaultValue={resetRequest?.email ?? ''} autoComplete="email" />
+          <input name="resetEmail" type="email" autoComplete="email" />
         </label>
         <button className="primary" type="submit">
           <Mail size={18} />
           Enviar codigo
         </button>
       </form>
-      {resetRequest && (
-        <form className="nested-form" onSubmit={onReset}>
-          <label>
-            Codigo de recuperacion
-            <input name="resetCode" inputMode="numeric" />
-          </label>
-          <PasswordField
-            name="newPassword"
-            label="Nueva contrasena"
-            autoComplete="new-password"
-            showPassword={showPassword}
-            setShowPassword={setShowPassword}
-          />
-          <button className="primary" type="submit">
-            <KeyRound size={18} />
-            Cambiar contrasena
-          </button>
-        </form>
-      )}
       {authError && <p className="error">{authError}</p>}
       {authNotice && <p className="notice">{authNotice}</p>}
       <button className="link-button" type="button" onClick={onBack}>

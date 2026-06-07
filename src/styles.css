@@ -45,6 +45,10 @@ button {
   color: white;
 }
 
+.auth-panel.single {
+  grid-template-columns: 1fr;
+}
+
 .auth-mascot {
   width: min(310px, 72vw);
   margin-top: 20px;
@@ -317,6 +321,14 @@ select {
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.recovery-inline {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  width: min(480px, 100%);
 }
 
 .toolbar {
@@ -617,6 +629,10 @@ select {
   .phase-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .recovery-inline {
+    grid-template-columns: 1fr;
   }
 
   .phase-actions .select-box {
