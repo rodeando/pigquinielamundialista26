@@ -1,6 +1,7 @@
 export const MATCHES = [
-  { id: 1, stage: 'Grupo A', group: 'A', date: '11 junio 2026', home: 'Mexico', away: 'South Africa', venue: 'Estadio Azteca', city: 'Mexico City' },
-  { id: 2, stage: 'Grupo A', group: 'A', date: '11 junio 2026', home: 'South Korea', away: 'Czechia', venue: 'Estadio Akron', city: 'Zapopan' },
+  // time uses Mexico City time (America/Mexico_City) for locking picks.
+  { id: 1, stage: 'Grupo A', group: 'A', date: '11 junio 2026', time: '13:00', home: 'Mexico', away: 'South Africa', venue: 'Estadio Azteca', city: 'Mexico City' },
+  { id: 2, stage: 'Grupo A', group: 'A', date: '11 junio 2026', time: '20:00', home: 'South Korea', away: 'Czechia', venue: 'Estadio Akron', city: 'Zapopan' },
   { id: 3, stage: 'Grupo B', group: 'B', date: '12 junio 2026', home: 'Canada', away: 'Bosnia and Herzegovina', venue: 'BMO Field', city: 'Toronto' },
   { id: 4, stage: 'Grupo D', group: 'D', date: '12 junio 2026', home: 'United States', away: 'Paraguay', venue: 'SoFi Stadium', city: 'Inglewood' },
   { id: 5, stage: 'Grupo B', group: 'B', date: '13 junio 2026', home: 'Qatar', away: 'Switzerland', venue: "Levi's Stadium", city: 'Santa Clara' },

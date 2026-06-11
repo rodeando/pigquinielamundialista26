@@ -32,6 +32,10 @@ import './styles.css';
 
 const NOTIFIED_KEY = 'quiniela2026:notified-phases';
 const NOTIFICATION_HOURS_BEFORE = 24;
+const DEFAULT_KICKOFF_TIME = '23:59';
+const APP_TIME_ZONE = 'America/Mexico_City';
+const APP_TIME_ZONE_LABEL = 'CDMX';
+const APP_UTC_OFFSET = '-06:00';
 
 const readStorage = (key, fallback) => {
   try {
@@ -44,6 +48,24 @@ const readStorage = (key, fallback) => {
 const writeStorage = (key, value) => localStorage.setItem(key, JSON.stringify(value));
 
 const normalizeEmail = (email) => email.trim().toLowerCase();
+
+const getAuthErrorMessage = (error) => {
+  const message = error?.message?.toLowerCase() ?? '';
+
+  if (message.includes('rate limit')) {
+    return 'Supabase bloqueo temporalmente el envio de correos por demasiados intentos. Espera unos minutos e intenta de nuevo.';
+  }
+
+  if (message.includes('invalid api key')) {
+    return 'La llave anon public de Supabase no es valida. Revisa VITE_SUPABASE_ANON_KEY y reinicia la app.';
+  }
+
+  if (message.includes('user already registered') || message.includes('already registered')) {
+    return 'Este correo ya esta registrado. Inicia sesion o recupera tu contrasena.';
+  }
+
+  return error?.message ?? 'Ocurrio un error. Intenta de nuevo.';
+};
 
 const getOutcome = (home, away) => {
   if (home === '' || away === '' || home === undefined || away === undefined) return '';
@@ -166,10 +188,24 @@ const monthMap = {
 const getMatchStartDate = (match) => {
   if (match.kickoffAt) return new Date(match.kickoffAt);
   const [day, monthName, year] = match.date.split(' ');
-  return new Date(`${year}-${monthMap[monthName]}-${String(day).padStart(2, '0')}T00:00:00-06:00`);
+  const time = match.time ?? DEFAULT_KICKOFF_TIME;
+  const utcOffset = match.utcOffset ?? APP_UTC_OFFSET;
+  return new Date(`${year}-${monthMap[monthName]}-${String(day).padStart(2, '0')}T${time}:00${utcOffset}`);
 };
 
-const hasMatchStarted = (match) => Date.now() >= getMatchStartDate(match).getTime();
+const hasMatchStarted = (match, now = Date.now()) => now >= getMatchStartDate(match).getTime();
+
+const getMatchDateLabel = (match) => {
+  if (match.time) return `${match.date} - ${match.time} h ${APP_TIME_ZONE_LABEL}`;
+  if (!match.kickoffAt) return `${match.date} - hora ${APP_TIME_ZONE_LABEL} por confirmar`;
+
+  return `${match.date} - ${new Intl.DateTimeFormat('es-MX', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: APP_TIME_ZONE,
+  }).format(getMatchStartDate(match))} h ${APP_TIME_ZONE_LABEL}`;
+};
 
 const phaseStarts = unlockPhases.map((phase) => {
   const phaseMatches = MATCHES.filter((match) => getMatchUnlockOrder(match) === phase.order);
@@ -195,6 +231,7 @@ function App() {
   const [showAccountPanel, setShowAccountPanel] = useState(false);
   const [accountError, setAccountError] = useState('');
   const [accountNotice, setAccountNotice] = useState('');
+  const [now, setNow] = useState(() => Date.now());
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     () => typeof Notification !== 'undefined' && Notification.permission === 'granted',
   );
@@ -257,6 +294,11 @@ function App() {
     const intervalId = window.setInterval(checkNotifications, 60 * 1000);
     return () => window.clearInterval(intervalId);
   }, [currentUser, notificationsEnabled]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setNow(Date.now()), 60 * 1000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   const leaderboard = useMemo(() => {
     return users
@@ -375,7 +417,7 @@ function App() {
       });
 
       if (error) {
-        setAuthError(error.message);
+        setAuthError(getAuthErrorMessage(error));
         setAuthNotice('');
         return;
       }
@@ -406,7 +448,7 @@ function App() {
     });
 
     if (error) {
-      setAuthError(error.message);
+      setAuthError(getAuthErrorMessage(error));
       setAuthNotice('');
       return;
     }
@@ -427,7 +469,7 @@ function App() {
 
     const { error } = await supabase.auth.updateUser({ password });
     if (error) {
-      setAuthError(error.message);
+      setAuthError(getAuthErrorMessage(error));
       return;
     }
 
@@ -456,7 +498,7 @@ function App() {
 
     const { error } = await supabase.auth.updateUser({ password });
     if (error) {
-      setAccountError(error.message);
+      setAccountError(getAuthErrorMessage(error));
       setAccountNotice('');
       return;
     }
@@ -468,7 +510,7 @@ function App() {
 
   const updatePick = async (matchId, patch) => {
     const match = MATCHES.find((item) => item.id === matchId);
-    if (!match || getMatchUnlockOrder(match) > unlockedOrder || hasMatchStarted(match)) return;
+    if (!match || getMatchUnlockOrder(match) > unlockedOrder || hasMatchStarted(match, now)) return;
     const current = picks[currentUser.email]?.[matchId] ?? {};
     const nextPick = { ...current, ...patch };
     if ('homeScore' in patch || 'awayScore' in patch) {
@@ -809,9 +851,9 @@ function App() {
                   match={match}
                   pick={(picks[currentUser.email] ?? {})[match.id] ?? {}}
                   result={results[match.id]}
-                  locked={getMatchUnlockOrder(match) > unlockedOrder || hasMatchStarted(match)}
+                  locked={getMatchUnlockOrder(match) > unlockedOrder || hasMatchStarted(match, now)}
                   lockReason={
-                    hasMatchStarted(match)
+                    hasMatchStarted(match, now)
                       ? 'El partido ya inicio'
                       : `Se habilitara en ${unlockPhases.find((phase) => phase.order === getMatchUnlockOrder(match))?.label}`
                   }
@@ -824,7 +866,7 @@ function App() {
                   users={users}
                   picks={picks}
                   result={results[match.id]}
-                  revealed={hasMatchStarted(match)}
+                  revealed={hasMatchStarted(match, now)}
                 />
               ) : (
                 <ResultCard
@@ -1050,7 +1092,7 @@ function MatchHeader({ match }) {
     <div className="match-meta">
       <span>#{match.id}</span>
       <span>{match.stage}</span>
-      <span>{match.date}</span>
+      <span>{getMatchDateLabel(match)}</span>
       <span>{match.venue}, {match.city}</span>
     </div>
   );
