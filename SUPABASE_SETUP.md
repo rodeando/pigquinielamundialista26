@@ -32,7 +32,7 @@ FOOTBALL_DATA_API_TOKEN=tu_token_de_football_data
 SYNC_RESULTS_SECRET=un_secreto_largo
 ```
 
-4. Deploy to Vercel. The cron in `vercel.json` calls `/api/sync-results` every 15 minutes.
+4. Deploy to Vercel. On Vercel Hobby, the cron in `vercel.json` calls `/api/sync-results` once per day. For more frequent automatic syncs, upgrade to Pro or trigger the endpoint manually after a match ends.
 5. To test manually, open:
 
 ```txt
