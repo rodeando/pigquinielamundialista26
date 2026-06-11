@@ -318,6 +318,15 @@ select {
   font-size: 1.15rem;
 }
 
+.phase-panel p {
+  margin: 6px 0 0;
+}
+
+.pending-results-alert {
+  color: #a63d2c;
+  font-weight: 900;
+}
+
 .phase-panel .select-box {
   width: min(280px, 100%);
 }
@@ -522,6 +531,21 @@ select {
 .result-card .points-pill {
   background: #dcae48;
   color: #221c12;
+}
+
+.result-status {
+  width: fit-content;
+  border-radius: 999px;
+  background: #edf0eb;
+  color: #53605b;
+  padding: 7px 10px;
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.result-status.pending {
+  background: #f6ded8;
+  color: #a63d2c;
 }
 
 .all-picks-list {

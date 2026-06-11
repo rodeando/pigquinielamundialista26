@@ -36,6 +36,7 @@ const DEFAULT_KICKOFF_TIME = '23:59';
 const APP_TIME_ZONE = 'America/Mexico_City';
 const APP_TIME_ZONE_LABEL = 'CDMX';
 const APP_UTC_OFFSET = '-06:00';
+const MATCH_DURATION_MINUTES = 120;
 
 const readStorage = (key, fallback) => {
   try {
@@ -194,6 +195,11 @@ const getMatchStartDate = (match) => {
 };
 
 const hasMatchStarted = (match, now = Date.now()) => now >= getMatchStartDate(match).getTime();
+
+const getMatchEndDate = (match) =>
+  new Date(getMatchStartDate(match).getTime() + MATCH_DURATION_MINUTES * 60 * 1000);
+
+const hasMatchEnded = (match, now = Date.now()) => now >= getMatchEndDate(match).getTime();
 
 const getMatchDateLabel = (match) => {
   if (match.time) return `${match.date} - ${match.time} h ${APP_TIME_ZONE_LABEL}`;
@@ -559,6 +565,9 @@ function App() {
   const userPoints = leaderboard.find((item) => item.email === currentUser?.email)?.points ?? 0;
   const unlockedMatches = MATCHES.filter((match) => getMatchUnlockOrder(match) <= unlockedOrder).length;
   const currentPhase = unlockPhases.find((phase) => phase.order === unlockedOrder)?.label ?? 'Jornada 1 grupos';
+  const finishedWithoutResult = MATCHES.filter(
+    (match) => hasMatchEnded(match, now) && !hasCompleteScore(results[match.id]),
+  );
 
   if (isLoading) {
     return (
@@ -797,6 +806,11 @@ function App() {
               <div>
                 <p className="eyebrow">Control de torneo</p>
                 <h2>Fase abierta: {currentPhase}</h2>
+                <p className={finishedWithoutResult.length ? 'pending-results-alert' : 'muted'}>
+                  {finishedWithoutResult.length
+                    ? `${finishedWithoutResult.length} partido(s) finalizado(s) sin resultado cargado.`
+                    : 'No hay partidos finalizados pendientes de resultado.'}
+                </p>
               </div>
               <div className="phase-actions">
                 <button
@@ -873,6 +887,8 @@ function App() {
                   key={match.id}
                   match={match}
                   result={results[match.id] ?? {}}
+                  started={hasMatchStarted(match, now)}
+                  ended={hasMatchEnded(match, now)}
                   onChange={(patch) => updateResult(match.id, patch)}
                 />
               ),
@@ -1069,11 +1085,23 @@ function AllPicksCard({ match, users, picks, result, revealed }) {
   );
 }
 
-function ResultCard({ match, result, onChange }) {
+function ResultCard({ match, result, started, ended, onChange }) {
   const outcome = getOutcome(result.homeScore, result.awayScore);
+  const hasResult = hasCompleteScore(result);
+  const statusLabel = hasResult
+    ? 'Resultado cargado'
+    : ended
+      ? 'Finalizado: falta resultado'
+      : started
+        ? 'En juego'
+        : 'Por iniciar';
+
   return (
     <article className="match-card result-card">
       <MatchHeader match={match} />
+      <div className={`result-status ${ended && !hasResult ? 'pending' : ''}`}>
+        {statusLabel}
+      </div>
       <div className="teams">
         <TeamName name={match.home} align="left" />
         <span>vs</span>
