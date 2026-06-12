@@ -61,19 +61,32 @@ const apiDateKey = (utcDate) => {
 
 const loadLocalMatches = () => {
   const sourcePath = path.join(process.cwd(), 'src', 'matches.js');
+  try {
+    const module = require(sourcePath);
+    if (Array.isArray(module.MATCHES)) return module.MATCHES.map(normalizeLocalMatch);
+  } catch {
+    // Local Vite source uses ESM syntax; fall back to extracting the array literal.
+  }
+
   const source = fs.readFileSync(sourcePath, 'utf8');
-  const arraySource = source
-    .replace(/^export const MATCHES = /, '')
-    .replace(/;\s*$/, '');
+  const arrayMatch = source.match(/MATCHES\s*=\s*(\[[\s\S]*?\]);/);
+
+  if (!arrayMatch) {
+    throw new Error('Could not read MATCHES from src/matches.js');
+  }
+
+  const arraySource = arrayMatch[1];
   const matches = Function(`"use strict"; return (${arraySource});`)();
 
-  return matches.map((match) => ({
-    ...match,
-    dateKey: localDateKey(match.date),
-    normalizedHome: normalizeTeam(match.home),
-    normalizedAway: normalizeTeam(match.away),
-  }));
+  return matches.map(normalizeLocalMatch);
 };
+
+const normalizeLocalMatch = (match) => ({
+  ...match,
+  dateKey: localDateKey(match.date),
+  normalizedHome: normalizeTeam(match.home),
+  normalizedAway: normalizeTeam(match.away),
+});
 
 const findLocalMatch = (localMatches, apiMatch) => {
   const dateKey = apiDateKey(apiMatch.utcDate);
