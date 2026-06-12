@@ -123,6 +123,17 @@ const isAuthorized = (request) => {
   return authHeader === `Bearer ${secret}` || cronHeader === secret || querySecret === secret;
 };
 
+const getJwtRole = (token) => {
+  try {
+    const payload = token.split('.')[1];
+    const normalizedPayload = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = Buffer.from(normalizedPayload, 'base64').toString('utf8');
+    return JSON.parse(decoded).role;
+  } catch {
+    return null;
+  }
+};
+
 module.exports = async function handler(request, response) {
   if (!isAuthorized(request)) {
     response.status(401).json({ error: 'Unauthorized' });
@@ -137,6 +148,14 @@ module.exports = async function handler(request, response) {
     response.status(500).json({
       error: 'Missing configuration',
       required: ['SUPABASE_URL or VITE_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'FOOTBALL_DATA_API_TOKEN'],
+    });
+    return;
+  }
+
+  if (getJwtRole(serviceRoleKey) !== 'service_role') {
+    response.status(500).json({
+      error: 'Invalid Supabase service role key',
+      detail: 'SUPABASE_SERVICE_ROLE_KEY must be the service_role key, not the anon public key.',
     });
     return;
   }
