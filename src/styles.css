@@ -576,22 +576,35 @@ select {
 
 .all-pick-row {
   display: grid;
-  grid-template-columns: minmax(100px, 1fr) auto auto auto minmax(92px, auto);
-  gap: 8px;
+  grid-template-columns: minmax(120px, 1fr) minmax(92px, auto) auto;
+  gap: 10px;
   align-items: center;
   border-radius: 8px;
   background: #f5f7f3;
-  padding: 9px;
+  padding: 10px 12px;
 }
 
-.all-pick-row span,
-.all-pick-row small {
+.all-pick-row strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.all-pick-row span {
   color: #65716b;
   font-weight: 800;
 }
 
-.all-pick-row b {
+.all-pick-prediction {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.all-pick-prediction b {
   color: #1f7a6f;
+  white-space: nowrap;
 }
 
 .match-points {
@@ -612,7 +625,6 @@ select {
 }
 
 .all-pick-row .muted {
-  grid-column: span 3;
   color: #8a928e;
 }
 
@@ -755,6 +767,10 @@ select {
 
   .all-pick-row {
     grid-template-columns: 1fr;
+  }
+
+  .all-pick-prediction {
+    justify-content: flex-start;
   }
 
   .account-password-form {

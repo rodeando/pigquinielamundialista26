@@ -94,14 +94,6 @@ const getPickPoints = (pick, result) => {
   return outcomePoints + scorePoints;
 };
 
-const getPickPointsDetail = (pick, result) => {
-  const points = getPickPoints(pick, result);
-  if (points === null) return 'Pendiente';
-  if (points === 3) return 'Resultado y marcador';
-  if (points === 1) return 'Resultado';
-  return 'Sin puntos';
-};
-
 const outcomeLabel = {
   home: 'Local',
   draw: 'Empate',
@@ -350,15 +342,7 @@ function App() {
         const total = MATCHES.reduce((sum, match) => {
           const pick = userPicks[match.id];
           const result = results[match.id];
-          if (!pick?.outcome || !hasCompleteScore(result)) return sum;
-          const resultOutcome = getOutcome(result.homeScore, result.awayScore);
-          const outcomePoints = pick.outcome === resultOutcome ? 1 : 0;
-          const scorePoints =
-            String(pick.homeScore) === String(result.homeScore) &&
-            String(pick.awayScore) === String(result.awayScore)
-              ? 2
-              : 0;
-          return sum + outcomePoints + scorePoints;
+          return sum + (getPickPoints(pick, result) ?? 0);
         }, 0);
 
         return {
@@ -1076,6 +1060,7 @@ function PredictionCard({ match, pick, result, locked, lockReason, onChange }) {
 function AllPicksCard({ match, users, picks, result, revealed }) {
   const hasResult = hasCompleteScore(result);
   const sortedUsers = [...users].sort((a, b) => {
+    if (!hasResult) return a.name.localeCompare(b.name);
     const pointsA = getPickPoints(picks[a.email]?.[match.id], result) ?? -1;
     const pointsB = getPickPoints(picks[b.email]?.[match.id], result) ?? -1;
     return pointsB - pointsA || a.name.localeCompare(b.name);
@@ -1100,7 +1085,7 @@ function AllPicksCard({ match, users, picks, result, revealed }) {
           <strong>Resultado</strong>
           <span>
             {hasResult
-              ? `${result.homeScore} - ${result.awayScore} · ${outcomeLabel[getOutcome(result.homeScore, result.awayScore)]}`
+              ? `${result.homeScore} - ${result.awayScore} | ${outcomeLabel[getOutcome(result.homeScore, result.awayScore)]}`
               : 'Marcador pendiente'}
           </span>
         </div>
@@ -1116,16 +1101,17 @@ function AllPicksCard({ match, users, picks, result, revealed }) {
                 <strong>{user.name}</strong>
                 {pick ? (
                   <>
-                    <span>{outcomeLabel[pick.outcome] ?? '-'}</span>
-                    <b>{pick.homeScore ?? '-'} - {pick.awayScore ?? '-'}</b>
+                    <div className="all-pick-prediction">
+                      <span>{outcomeLabel[pick.outcome] ?? '-'}</span>
+                      <b>{pick.homeScore ?? '-'} - {pick.awayScore ?? '-'}</b>
+                    </div>
                     <span className={`match-points ${pickPoints ? 'earned' : ''}`}>
                       {pickPoints === null ? 'Pendiente' : `${pickPoints} pts`}
                     </span>
-                    <small>{getPickPointsDetail(pick, result)}</small>
                   </>
                 ) : (
                   <>
-                    <span className="muted">Sin pronostico</span>
+                    <div className="all-pick-prediction muted">Sin pronostico</div>
                     <span className="match-points">0 pts</span>
                   </>
                 )}
