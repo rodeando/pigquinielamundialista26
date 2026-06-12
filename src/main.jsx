@@ -252,6 +252,7 @@ function App() {
   const [accountError, setAccountError] = useState('');
   const [accountNotice, setAccountNotice] = useState('');
   const [now, setNow] = useState(() => Date.now());
+  const [isAdmin, setIsAdmin] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     () => typeof Notification !== 'undefined' && Notification.permission === 'granted',
   );
@@ -268,7 +269,7 @@ function App() {
     const loadSession = async () => {
       const { data } = await supabase.auth.getSession();
       setSession(data.session);
-      if (data.session) await loadAppData();
+      if (data.session) await loadAppData(data.session);
       setIsLoading(false);
     };
 
@@ -278,11 +279,12 @@ function App() {
       setSession(nextSession);
       setIsPasswordRecovery(event === 'PASSWORD_RECOVERY');
       if (nextSession) {
-        loadAppData();
+        loadAppData(nextSession);
       } else {
         setUsers([]);
         setPicks({});
         setResults({});
+        setIsAdmin(false);
       }
     });
 
@@ -319,6 +321,10 @@ function App() {
     const intervalId = window.setInterval(() => setNow(Date.now()), 60 * 1000);
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'resultados') setActiveTab('quiniela');
+  }, [activeTab, isAdmin]);
 
   const leaderboard = useMemo(() => {
     return users
@@ -362,12 +368,23 @@ function App() {
     });
   }, [query, stage]);
 
-  const loadAppData = async () => {
-    const [{ data: profiles }, { data: pickRows }, { data: resultRows }, { data: settingRows }] = await Promise.all([
+  const loadAppData = async (activeSession = session) => {
+    const normalizedSessionEmail = normalizeEmail(activeSession?.user?.email ?? '');
+    const adminQuery = normalizedSessionEmail
+      ? supabase.from('admin_users').select('email').eq('email', normalizedSessionEmail).maybeSingle()
+      : Promise.resolve({ data: null });
+    const [
+      { data: profiles },
+      { data: pickRows },
+      { data: resultRows },
+      { data: settingRows },
+      { data: adminRow },
+    ] = await Promise.all([
       supabase.from('profiles').select('id,email,name').order('name'),
       supabase.from('picks').select('user_id,match_id,outcome,home_score,away_score'),
       supabase.from('results').select('match_id,home_score,away_score'),
       supabase.from('app_settings').select('key,value').eq('key', 'unlocked_phase').limit(1),
+      adminQuery,
     ]);
 
     const nextUsers = profiles ?? [];
@@ -397,9 +414,11 @@ function App() {
     setPicks(nextPicks);
     setResults(nextResults);
     setUnlockedOrder(Number(settingRows?.[0]?.value ?? 1));
+    setIsAdmin(Boolean(adminRow));
   };
 
   const saveUnlockedOrder = async (nextOrder) => {
+    if (!isAdmin) return;
     setUnlockedOrder(nextOrder);
     await supabase.from('app_settings').upsert({
       key: 'unlocked_phase',
@@ -557,6 +576,7 @@ function App() {
   };
 
   const updateResult = async (matchId, patch) => {
+    if (!isAdmin) return;
     const nextResult = {
       ...(results[matchId] ?? {}),
       ...patch,
@@ -806,16 +826,18 @@ function App() {
         <button className={activeTab === 'todos' ? 'active' : ''} onClick={() => setActiveTab('todos')}>
           Todos
         </button>
-        <button className={activeTab === 'resultados' ? 'active' : ''} onClick={() => setActiveTab('resultados')}>
-          Resultados
-        </button>
+        {isAdmin && (
+          <button className={activeTab === 'resultados' ? 'active' : ''} onClick={() => setActiveTab('resultados')}>
+            Resultados
+          </button>
+        )}
       </nav>
 
       {activeTab === 'tabla' && <Leaderboard leaderboard={leaderboard} />}
 
       {activeTab !== 'tabla' && (
         <>
-          {activeTab === 'resultados' && (
+          {activeTab === 'resultados' && isAdmin && (
             <section className="phase-panel">
               <div>
                 <p className="eyebrow">Control de torneo</p>
@@ -896,7 +918,7 @@ function App() {
                   result={results[match.id]}
                   revealed={hasMatchStarted(match, now)}
                 />
-              ) : (
+              ) : isAdmin ? (
                 <ResultCard
                   key={match.id}
                   match={match}
@@ -905,7 +927,7 @@ function App() {
                   ended={hasMatchEnded(match, now)}
                   onChange={(patch) => updateResult(match.id, patch)}
                 />
-              ),
+              ) : null,
             )}
           </section>
         </>

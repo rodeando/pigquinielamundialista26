@@ -28,6 +28,11 @@ create table if not exists public.app_settings (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.admin_users (
+  email text primary key,
+  created_at timestamptz not null default now()
+);
+
 insert into public.app_settings(key, value)
 values ('unlocked_phase', '1'::jsonb)
 on conflict (key) do nothing;
@@ -60,6 +65,7 @@ alter table public.profiles enable row level security;
 alter table public.picks enable row level security;
 alter table public.results enable row level security;
 alter table public.app_settings enable row level security;
+alter table public.admin_users enable row level security;
 
 drop policy if exists "Profiles are visible to authenticated users" on public.profiles;
 create policy "Profiles are visible to authenticated users"
@@ -106,11 +112,22 @@ to authenticated
 using (true);
 
 drop policy if exists "Authenticated users can manage results" on public.results;
-create policy "Authenticated users can manage results"
+drop policy if exists "Admins can manage results" on public.results;
+create policy "Admins can manage results"
 on public.results for all
 to authenticated
-using (true)
-with check (true);
+using (
+  exists (
+    select 1 from public.admin_users
+    where lower(admin_users.email) = lower(auth.jwt() ->> 'email')
+  )
+)
+with check (
+  exists (
+    select 1 from public.admin_users
+    where lower(admin_users.email) = lower(auth.jwt() ->> 'email')
+  )
+);
 
 drop policy if exists "Settings are visible to authenticated users" on public.app_settings;
 create policy "Settings are visible to authenticated users"
@@ -119,8 +136,25 @@ to authenticated
 using (true);
 
 drop policy if exists "Authenticated users can manage settings" on public.app_settings;
-create policy "Authenticated users can manage settings"
+drop policy if exists "Admins can manage settings" on public.app_settings;
+create policy "Admins can manage settings"
 on public.app_settings for all
 to authenticated
-using (true)
-with check (true);
+using (
+  exists (
+    select 1 from public.admin_users
+    where lower(admin_users.email) = lower(auth.jwt() ->> 'email')
+  )
+)
+with check (
+  exists (
+    select 1 from public.admin_users
+    where lower(admin_users.email) = lower(auth.jwt() ->> 'email')
+  )
+);
+
+drop policy if exists "Users can see their admin record" on public.admin_users;
+create policy "Users can see their admin record"
+on public.admin_users for select
+to authenticated
+using (lower(email) = lower(auth.jwt() ->> 'email'));

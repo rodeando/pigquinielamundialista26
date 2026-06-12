@@ -19,6 +19,20 @@ VITE_SUPABASE_ANON_KEY=tu_anon_public_key
 
 Supabase Auth enforces unique emails. The app stores shared users in `profiles`, picks in `picks`, results in `results`, and the open phase in `app_settings`.
 
+## Admin users
+
+Only admin users can open the `Resultados` tab, update match scores, and change the open phase.
+
+After running `supabase-schema.sql`, add your admin email in Supabase SQL Editor:
+
+```sql
+insert into public.admin_users(email)
+values ('tu-correo@ejemplo.com')
+on conflict (email) do nothing;
+```
+
+Normal users can read results and rankings, but cannot edit official scores or tournament settings.
+
 ## Automatic results with football-data.org
 
 1. Create a free account at `football-data.org` and copy your API token.
