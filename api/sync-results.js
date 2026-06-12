@@ -21,6 +21,7 @@ const monthMap = {
 };
 
 const teamAliases = {
+  'bosnia herzegovina': 'bosnia and herzegovina',
   'cote divoire': 'ivory coast',
   'cote d ivoire': 'ivory coast',
   'czech republic': 'czechia',
