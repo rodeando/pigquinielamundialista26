@@ -20,6 +20,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -97,6 +98,19 @@ const outcomeLabel = {
   draw: 'Empate',
   away: 'Visitante',
 };
+
+const playerColorPalette = [
+  '#1f7a6f',
+  '#dcae48',
+  '#a63d2c',
+  '#315f9f',
+  '#7c4d96',
+  '#2f8f46',
+  '#c95b2c',
+  '#52606d',
+  '#b33f72',
+  '#008c95',
+];
 
 const flagMap = {
   Algeria: '🇩🇿',
@@ -1138,24 +1152,33 @@ function MatchHeader({ match }) {
 }
 
 function Leaderboard({ leaderboard }) {
+  const chartData = leaderboard.map((item, index) => ({
+    ...item,
+    color: playerColorPalette[index % playerColorPalette.length],
+  }));
+
   return (
     <section className="leaderboard-layout">
       <div className="chart-panel">
         <h2>Ranking de puntos</h2>
         <ResponsiveContainer width="100%" height={320}>
-          <BarChart data={leaderboard} margin={{ top: 10, right: 12, left: -18, bottom: 0 }}>
+          <BarChart data={chartData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }} barCategoryGap="38%">
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="name" />
             <YAxis allowDecimals={false} />
             <Tooltip />
-            <Bar dataKey="points" fill="#1f7a6f" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="points" barSize={24} radius={[4, 4, 0, 0]}>
+              {chartData.map((item) => (
+                <Cell key={item.email} fill={item.color} />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
       <div className="ranking-list">
-        {leaderboard.map((item, index) => (
+        {chartData.map((item, index) => (
           <article key={item.email} className="ranking-item">
-            <span>{index + 1}</span>
+            <span style={{ background: item.color }}>{index + 1}</span>
             <div>
               <strong>{item.name}</strong>
               <small>{item.picks} pronosticos</small>
