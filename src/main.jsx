@@ -50,6 +50,14 @@ const writeStorage = (key, value) => localStorage.setItem(key, JSON.stringify(va
 
 const normalizeEmail = (email) => email.trim().toLowerCase();
 
+const triggerAutoResultSync = async () => {
+  try {
+    await fetch('/api/sync-results?mode=auto');
+  } catch {
+    // Result sync is opportunistic; the app can still work with the latest stored results.
+  }
+};
+
 const getAuthErrorMessage = (error) => {
   const message = error?.message?.toLowerCase() ?? '';
 
@@ -254,7 +262,10 @@ function App() {
     const loadSession = async () => {
       const { data } = await supabase.auth.getSession();
       setSession(data.session);
-      if (data.session) await loadAppData();
+      if (data.session) {
+        await triggerAutoResultSync();
+        await loadAppData();
+      }
       setIsLoading(false);
     };
 
@@ -264,7 +275,7 @@ function App() {
       setSession(nextSession);
       setIsPasswordRecovery(event === 'PASSWORD_RECOVERY');
       if (nextSession) {
-        loadAppData();
+        triggerAutoResultSync().finally(loadAppData);
       } else {
         setUsers([]);
         setPicks({});

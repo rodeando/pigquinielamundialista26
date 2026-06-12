@@ -4,6 +4,8 @@ const { createClient } = require('@supabase/supabase-js');
 
 const FOOTBALL_DATA_URL = 'https://api.football-data.org/v4/competitions/WC/matches?season=2026&status=FINISHED';
 const APP_TIME_ZONE = 'America/Mexico_City';
+const AUTO_SYNC_INTERVAL_MS = 10 * 60 * 1000;
+const AUTO_SYNC_SETTING_KEY = 'last_auto_result_sync';
 
 const monthMap = {
   enero: '01',
@@ -123,6 +125,8 @@ const isAuthorized = (request) => {
   return authHeader === `Bearer ${secret}` || cronHeader === secret || querySecret === secret;
 };
 
+const isAutoSyncRequest = (request) => request.query?.mode === 'auto';
+
 const getJwtRole = (token) => {
   try {
     const payload = token.split('.')[1];
@@ -135,7 +139,7 @@ const getJwtRole = (token) => {
 };
 
 module.exports = async function handler(request, response) {
-  if (!isAuthorized(request)) {
+  if (!isAuthorized(request) && !isAutoSyncRequest(request)) {
     response.status(401).json({ error: 'Unauthorized' });
     return;
   }
@@ -158,6 +162,28 @@ module.exports = async function handler(request, response) {
       detail: 'SUPABASE_SERVICE_ROLE_KEY must be the service_role key, not the anon public key.',
     });
     return;
+  }
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
+
+  if (isAutoSyncRequest(request)) {
+    const { data: setting } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', AUTO_SYNC_SETTING_KEY)
+      .maybeSingle();
+    const lastSync = setting?.value ? new Date(String(setting.value)).getTime() : 0;
+
+    if (Number.isFinite(lastSync) && Date.now() - lastSync < AUTO_SYNC_INTERVAL_MS) {
+      response.status(200).json({
+        ok: true,
+        skipped: true,
+        reason: 'Auto sync was recently executed.',
+      });
+      return;
+    }
   }
 
   const footballResponse = await fetch(FOOTBALL_DATA_URL, {
@@ -202,6 +228,14 @@ module.exports = async function handler(request, response) {
   }
 
   if (!rows.length) {
+    if (isAutoSyncRequest(request)) {
+      await supabase.from('app_settings').upsert({
+        key: AUTO_SYNC_SETTING_KEY,
+        value: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
+
     response.status(200).json({
       ok: true,
       updated: 0,
@@ -211,15 +245,19 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false },
-  });
-
   const { error } = await supabase.from('results').upsert(rows, { onConflict: 'match_id' });
 
   if (error) {
     response.status(500).json({ error: error.message });
     return;
+  }
+
+  if (isAutoSyncRequest(request)) {
+    await supabase.from('app_settings').upsert({
+      key: AUTO_SYNC_SETTING_KEY,
+      value: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
   }
 
   response.status(200).json({
