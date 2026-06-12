@@ -85,6 +85,23 @@ const hasCompleteScore = (score) =>
   score?.homeScore !== undefined &&
   score?.awayScore !== undefined;
 
+const getPickPoints = (pick, result) => {
+  if (!pick?.outcome || !hasCompleteScore(result)) return null;
+  const resultOutcome = getOutcome(result.homeScore, result.awayScore);
+  const outcomePoints = pick.outcome === resultOutcome ? 1 : 0;
+  const scorePoints =
+    String(pick.homeScore) === String(result.homeScore) && String(pick.awayScore) === String(result.awayScore) ? 2 : 0;
+  return outcomePoints + scorePoints;
+};
+
+const getPickPointsDetail = (pick, result) => {
+  const points = getPickPoints(pick, result);
+  if (points === null) return 'Pendiente';
+  if (points === 3) return 'Resultado y marcador';
+  if (points === 1) return 'Resultado';
+  return 'Sin puntos';
+};
+
 const outcomeLabel = {
   home: 'Local',
   draw: 'Empate',
@@ -1020,15 +1037,7 @@ function ScoreInputs({ value, onChange, disabled = false }) {
 }
 
 function PredictionCard({ match, pick, result, locked, lockReason, onChange }) {
-  const hasResult = hasCompleteScore(result);
-  const resultOutcome = hasResult ? getOutcome(result.homeScore, result.awayScore) : '';
-  const points =
-    hasResult && pick.outcome
-      ? (pick.outcome === resultOutcome ? 1 : 0) +
-        (String(pick.homeScore) === String(result.homeScore) && String(pick.awayScore) === String(result.awayScore)
-          ? 2
-          : 0)
-      : null;
+  const points = getPickPoints(pick, result);
 
   return (
     <article className={`match-card ${locked ? 'locked-card' : ''}`}>
@@ -1066,7 +1075,11 @@ function PredictionCard({ match, pick, result, locked, lockReason, onChange }) {
 
 function AllPicksCard({ match, users, picks, result, revealed }) {
   const hasResult = hasCompleteScore(result);
-  const resultOutcome = hasResult ? getOutcome(result.homeScore, result.awayScore) : '';
+  const sortedUsers = [...users].sort((a, b) => {
+    const pointsA = getPickPoints(picks[a.email]?.[match.id], result) ?? -1;
+    const pointsB = getPickPoints(picks[b.email]?.[match.id], result) ?? -1;
+    return pointsB - pointsA || a.name.localeCompare(b.name);
+  });
 
   return (
     <article className={`match-card ${!revealed ? 'locked-card' : ''}`}>
@@ -1082,18 +1095,21 @@ function AllPicksCard({ match, users, picks, result, revealed }) {
         <span>vs</span>
         <TeamName name={match.away} align="right" />
       </div>
+      {revealed && (
+        <div className={`match-result-summary ${hasResult ? 'complete' : ''}`}>
+          <strong>Resultado</strong>
+          <span>
+            {hasResult
+              ? `${result.homeScore} - ${result.awayScore} · ${outcomeLabel[getOutcome(result.homeScore, result.awayScore)]}`
+              : 'Marcador pendiente'}
+          </span>
+        </div>
+      )}
       {revealed ? (
         <div className="all-picks-list">
-          {users.map((user) => {
+          {sortedUsers.map((user) => {
             const pick = picks[user.email]?.[match.id];
-            const pickPoints =
-              hasResult && pick?.outcome
-                ? (pick.outcome === resultOutcome ? 1 : 0) +
-                  (String(pick.homeScore) === String(result.homeScore) &&
-                  String(pick.awayScore) === String(result.awayScore)
-                    ? 2
-                    : 0)
-                : null;
+            const pickPoints = getPickPoints(pick, result);
 
             return (
               <div className="all-pick-row" key={user.email}>
@@ -1102,10 +1118,16 @@ function AllPicksCard({ match, users, picks, result, revealed }) {
                   <>
                     <span>{outcomeLabel[pick.outcome] ?? '-'}</span>
                     <b>{pick.homeScore ?? '-'} - {pick.awayScore ?? '-'}</b>
-                    <small>{pickPoints === null ? 'Pendiente' : `${pickPoints} pts`}</small>
+                    <span className={`match-points ${pickPoints ? 'earned' : ''}`}>
+                      {pickPoints === null ? 'Pendiente' : `${pickPoints} pts`}
+                    </span>
+                    <small>{getPickPointsDetail(pick, result)}</small>
                   </>
                 ) : (
-                  <span className="muted">Sin pronostico</span>
+                  <>
+                    <span className="muted">Sin pronostico</span>
+                    <span className="match-points">0 pts</span>
+                  </>
                 )}
               </div>
             );

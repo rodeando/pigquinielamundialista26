@@ -553,9 +553,30 @@ select {
   gap: 8px;
 }
 
+.match-result-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 8px;
+  background: #edf0eb;
+  color: #59645f;
+  padding: 9px 10px;
+  font-weight: 900;
+}
+
+.match-result-summary.complete {
+  background: #e3f1ec;
+  color: #1f7a6f;
+}
+
+.match-result-summary span {
+  text-align: right;
+}
+
 .all-pick-row {
   display: grid;
-  grid-template-columns: minmax(100px, 1fr) auto auto auto;
+  grid-template-columns: minmax(100px, 1fr) auto auto auto minmax(92px, auto);
   gap: 8px;
   align-items: center;
   border-radius: 8px;
@@ -571,6 +592,23 @@ select {
 
 .all-pick-row b {
   color: #1f7a6f;
+}
+
+.match-points {
+  justify-self: end;
+  min-width: 64px;
+  border-radius: 999px;
+  background: #e5e9e2;
+  color: #59645f;
+  padding: 6px 8px;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.match-points.earned {
+  background: #25302d;
+  color: white;
 }
 
 .all-pick-row .muted {
