@@ -164,9 +164,18 @@ module.exports = async function handler(request, response) {
     auth: { persistSession: false },
   });
 
-  const footballResponse = await fetch(FOOTBALL_DATA_URL, {
-    headers: { 'X-Auth-Token': footballDataToken },
-  });
+  let footballResponse;
+  try {
+    footballResponse = await fetch(FOOTBALL_DATA_URL, {
+      headers: { 'X-Auth-Token': footballDataToken },
+    });
+  } catch (error) {
+    response.status(502).json({
+      error: 'Football Data connection failed',
+      detail: error.message,
+    });
+    return;
+  }
 
   if (!footballResponse.ok) {
     const body = await footballResponse.text();
