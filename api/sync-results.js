@@ -23,6 +23,7 @@ const monthMap = {
 const teamAliases = {
   'bosnia herzegovina': 'bosnia and herzegovina',
   'cape verde islands': 'cape verde',
+  'congo dr': 'dr congo',
   'cote divoire': 'ivory coast',
   'cote d ivoire': 'ivory coast',
   'czech republic': 'czechia',
