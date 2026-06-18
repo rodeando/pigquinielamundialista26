@@ -178,6 +178,16 @@ const unlockPhases = [
   { order: 9, label: 'Final' },
 ];
 
+const scheduledPhaseUnlocks = [
+  { order: 2, startsAt: new Date('2026-06-17T22:00:00-06:00').getTime() },
+];
+
+const getEffectiveUnlockedOrder = (manualOrder, now = Date.now()) =>
+  scheduledPhaseUnlocks.reduce(
+    (order, unlock) => (now >= unlock.startsAt ? Math.max(order, unlock.order) : order),
+    Number(manualOrder) || 1,
+  );
+
 const knockoutOrder = {
   'Ronda de 32': 4,
   Octavos: 5,
@@ -550,7 +560,8 @@ function App() {
 
   const updatePick = async (matchId, patch) => {
     const match = MATCHES.find((item) => item.id === matchId);
-    if (!match || getMatchUnlockOrder(match) > unlockedOrder || hasMatchStarted(match, now)) return;
+    const effectiveUnlockedOrder = getEffectiveUnlockedOrder(unlockedOrder, now);
+    if (!match || getMatchUnlockOrder(match) > effectiveUnlockedOrder || hasMatchStarted(match, now)) return;
     const current = picks[currentUser.email]?.[matchId] ?? {};
     const nextPick = { ...current, ...patch };
     if ('homeScore' in patch || 'awayScore' in patch) {
@@ -595,11 +606,13 @@ function App() {
     });
   };
 
+  const effectiveUnlockedOrder = getEffectiveUnlockedOrder(unlockedOrder, now);
   const userPickCount = Object.keys(picks[currentUser?.email] ?? {}).length;
   const userPosition = leaderboard.findIndex((item) => item.email === currentUser?.email) + 1;
   const userPoints = leaderboard.find((item) => item.email === currentUser?.email)?.points ?? 0;
-  const unlockedMatches = MATCHES.filter((match) => getMatchUnlockOrder(match) <= unlockedOrder).length;
-  const currentPhase = unlockPhases.find((phase) => phase.order === unlockedOrder)?.label ?? 'Jornada 1 grupos';
+  const unlockedMatches = MATCHES.filter((match) => getMatchUnlockOrder(match) <= effectiveUnlockedOrder).length;
+  const currentPhase =
+    unlockPhases.find((phase) => phase.order === effectiveUnlockedOrder)?.label ?? 'Jornada 1 grupos';
   const finishedWithoutResult = MATCHES.filter(
     (match) => hasMatchEnded(match, now) && !hasCompleteScore(results[match.id]),
   );
@@ -860,7 +873,7 @@ function App() {
                 </button>
                 <label className="select-box">
                   <select
-                    value={unlockedOrder}
+                    value={effectiveUnlockedOrder}
                     onChange={(event) => saveUnlockedOrder(Number(event.target.value))}
                   >
                     {unlockPhases.map((phase) => (
@@ -902,7 +915,7 @@ function App() {
                   match={match}
                   pick={(picks[currentUser.email] ?? {})[match.id] ?? {}}
                   result={results[match.id]}
-                  locked={getMatchUnlockOrder(match) > unlockedOrder || hasMatchStarted(match, now)}
+                  locked={getMatchUnlockOrder(match) > effectiveUnlockedOrder || hasMatchStarted(match, now)}
                   lockReason={
                     hasMatchStarted(match, now)
                       ? 'El partido ya inicio'
