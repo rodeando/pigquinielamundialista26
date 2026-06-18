@@ -58,7 +58,7 @@ const bonusFields = [
   {
     key: 'bestGoalkeeper',
     column: 'best_goalkeeper',
-    label: 'Portero menos goleado',
+    label: 'Mejor portero del mundial',
     points: 5,
     placeholder: 'Nombre del portero',
   },
