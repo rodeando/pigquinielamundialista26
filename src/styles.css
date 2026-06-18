@@ -674,6 +674,18 @@ select {
   font-weight: 900;
 }
 
+.bonus-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .bonus-table-card h2 {
   margin: 0;
   font-size: 1.15rem;

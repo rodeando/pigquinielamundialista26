@@ -628,22 +628,23 @@ function App() {
     });
   };
 
-  const updateBonusPick = async (patch) => {
-    if (now >= BONUS_DEADLINE_AT) return;
+  const updateBonusPick = async (nextPick) => {
+    if (now >= BONUS_DEADLINE_AT) return false;
     const current = bonusPicks[currentUser.email] ?? {};
-    const nextPick = { ...current, ...patch };
+    const savedPick = { ...current, ...nextPick };
     setBonusPicks({
       ...bonusPicks,
-      [currentUser.email]: nextPick,
+      [currentUser.email]: savedPick,
     });
 
     await supabase.from('bonus_picks').upsert({
       user_id: currentUser.id,
-      world_champion: nextPick.worldChampion?.trim() || null,
-      top_scorer: nextPick.topScorer?.trim() || null,
-      best_goalkeeper: nextPick.bestGoalkeeper?.trim() || null,
+      world_champion: savedPick.worldChampion?.trim() || null,
+      top_scorer: savedPick.topScorer?.trim() || null,
+      best_goalkeeper: savedPick.bestGoalkeeper?.trim() || null,
       updated_at: new Date().toISOString(),
     });
+    return true;
   };
 
   const updateResult = async (matchId, patch) => {
@@ -918,7 +919,7 @@ function App() {
           bonusPicks={bonusPicks}
           currentPick={bonusPicks[currentUser.email] ?? {}}
           locked={bonusLocked}
-          onChange={updateBonusPick}
+          onSave={updateBonusPick}
         />
       )}
 
@@ -1023,12 +1024,24 @@ function App() {
   );
 }
 
-function BonusPicksPanel({ users, bonusPicks, currentPick, locked, onChange }) {
+function BonusPicksPanel({ users, bonusPicks, currentPick, locked, onSave }) {
+  const [draft, setDraft] = useState(currentPick);
+  const [notice, setNotice] = useState('');
   const sortedUsers = [...users].sort((a, b) => a.name.localeCompare(b.name));
+
+  useEffect(() => {
+    setDraft(currentPick);
+  }, [currentPick]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const saved = await onSave(draft);
+    setNotice(saved ? 'Resultados guardados.' : '');
+  };
 
   return (
     <section className="bonus-layout">
-      <article className={`phase-panel bonus-editor ${locked ? 'locked-card' : ''}`}>
+      <form className={`phase-panel bonus-editor ${locked ? 'locked-card' : ''}`} onSubmit={handleSubmit}>
         <div>
           <p className="eyebrow">Extras</p>
           <h2>Pronosticos especiales</h2>
@@ -1051,15 +1064,25 @@ function BonusPicksPanel({ users, bonusPicks, currentPick, locked, onChange }) {
               <input
                 type="text"
                 disabled={locked}
-                value={currentPick[field.key] ?? ''}
+                value={draft[field.key] ?? ''}
                 placeholder={field.placeholder}
-                onChange={(event) => onChange({ [field.key]: event.target.value })}
+                onChange={(event) => {
+                  setDraft({ ...draft, [field.key]: event.target.value });
+                  setNotice('');
+                }}
               />
               <span>{field.points} pts</span>
             </label>
           ))}
         </div>
-      </article>
+        <div className="bonus-actions">
+          <button className="primary" type="submit" disabled={locked}>
+            <Check size={18} />
+            Guardar resultados
+          </button>
+          {notice && <p className="notice">{notice}</p>}
+        </div>
+      </form>
 
       <article className={`match-card bonus-table-card ${!locked ? 'locked-card' : ''}`}>
         <div>
