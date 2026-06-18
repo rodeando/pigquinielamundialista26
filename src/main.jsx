@@ -38,6 +38,31 @@ const APP_TIME_ZONE = 'America/Mexico_City';
 const APP_TIME_ZONE_LABEL = 'CDMX';
 const APP_UTC_OFFSET = '-06:00';
 const MATCH_DURATION_MINUTES = 120;
+const BONUS_DEADLINE_AT = new Date('2026-06-19T11:00:00-06:00').getTime();
+
+const bonusFields = [
+  {
+    key: 'worldChampion',
+    column: 'world_champion',
+    label: 'Campeon del mundo',
+    points: 10,
+    placeholder: 'Seleccion campeona',
+  },
+  {
+    key: 'topScorer',
+    column: 'top_scorer',
+    label: 'Goleador del mundial',
+    points: 5,
+    placeholder: 'Nombre del jugador',
+  },
+  {
+    key: 'bestGoalkeeper',
+    column: 'best_goalkeeper',
+    label: 'Portero menos goleado',
+    points: 5,
+    placeholder: 'Nombre del portero',
+  },
+];
 
 const readStorage = (key, fallback) => {
   try {
@@ -256,6 +281,7 @@ function App() {
   const [users, setUsers] = useState([]);
   const [session, setSession] = useState(null);
   const [picks, setPicks] = useState({});
+  const [bonusPicks, setBonusPicks] = useState({});
   const [results, setResults] = useState({});
   const [unlockedOrder, setUnlockedOrder] = useState(1);
   const [isLoading, setIsLoading] = useState(isSupabaseConfigured);
@@ -302,6 +328,7 @@ function App() {
       } else {
         setUsers([]);
         setPicks({});
+        setBonusPicks({});
         setResults({});
         setIsAdmin(false);
       }
@@ -387,12 +414,14 @@ function App() {
     const [
       { data: profiles },
       { data: pickRows },
+      { data: bonusRows },
       { data: resultRows },
       { data: settingRows },
       { data: adminRow },
     ] = await Promise.all([
       supabase.from('profiles').select('id,email,name').order('name'),
       supabase.from('picks').select('user_id,match_id,outcome,home_score,away_score'),
+      supabase.from('bonus_picks').select('user_id,world_champion,top_scorer,best_goalkeeper'),
       supabase.from('results').select('match_id,home_score,away_score'),
       supabase.from('app_settings').select('key,value').eq('key', 'unlocked_phase').limit(1),
       adminQuery,
@@ -413,6 +442,17 @@ function App() {
       };
     }
 
+    const nextBonusPicks = {};
+    for (const row of bonusRows ?? []) {
+      const user = usersById[row.user_id];
+      if (!user) continue;
+      nextBonusPicks[user.email] = {
+        worldChampion: row.world_champion ?? '',
+        topScorer: row.top_scorer ?? '',
+        bestGoalkeeper: row.best_goalkeeper ?? '',
+      };
+    }
+
     const nextResults = {};
     for (const row of resultRows ?? []) {
       nextResults[row.match_id] = {
@@ -423,6 +463,7 @@ function App() {
 
     setUsers(nextUsers);
     setPicks(nextPicks);
+    setBonusPicks(nextBonusPicks);
     setResults(nextResults);
     setUnlockedOrder(Number(settingRows?.[0]?.value ?? 1));
     setIsAdmin(Boolean(adminRow));
@@ -587,6 +628,24 @@ function App() {
     });
   };
 
+  const updateBonusPick = async (patch) => {
+    if (now >= BONUS_DEADLINE_AT) return;
+    const current = bonusPicks[currentUser.email] ?? {};
+    const nextPick = { ...current, ...patch };
+    setBonusPicks({
+      ...bonusPicks,
+      [currentUser.email]: nextPick,
+    });
+
+    await supabase.from('bonus_picks').upsert({
+      user_id: currentUser.id,
+      world_champion: nextPick.worldChampion?.trim() || null,
+      top_scorer: nextPick.topScorer?.trim() || null,
+      best_goalkeeper: nextPick.bestGoalkeeper?.trim() || null,
+      updated_at: new Date().toISOString(),
+    });
+  };
+
   const updateResult = async (matchId, patch) => {
     if (!isAdmin) return;
     const nextResult = {
@@ -607,6 +666,7 @@ function App() {
   };
 
   const effectiveUnlockedOrder = getEffectiveUnlockedOrder(unlockedOrder, now);
+  const bonusLocked = now >= BONUS_DEADLINE_AT;
   const userPickCount = Object.keys(picks[currentUser?.email] ?? {}).length;
   const userPosition = leaderboard.findIndex((item) => item.email === currentUser?.email) + 1;
   const userPoints = leaderboard.find((item) => item.email === currentUser?.email)?.points ?? 0;
@@ -840,6 +900,9 @@ function App() {
         <button className={activeTab === 'todos' ? 'active' : ''} onClick={() => setActiveTab('todos')}>
           Todos
         </button>
+        <button className={activeTab === 'extras' ? 'active' : ''} onClick={() => setActiveTab('extras')}>
+          Extras
+        </button>
         {isAdmin && (
           <button className={activeTab === 'resultados' ? 'active' : ''} onClick={() => setActiveTab('resultados')}>
             Resultados
@@ -849,7 +912,17 @@ function App() {
 
       {activeTab === 'tabla' && <Leaderboard leaderboard={leaderboard} />}
 
-      {activeTab !== 'tabla' && (
+      {activeTab === 'extras' && (
+        <BonusPicksPanel
+          users={users}
+          bonusPicks={bonusPicks}
+          currentPick={bonusPicks[currentUser.email] ?? {}}
+          locked={bonusLocked}
+          onChange={updateBonusPick}
+        />
+      )}
+
+      {['quiniela', 'todos', 'resultados'].includes(activeTab) && (
         <>
           {activeTab === 'resultados' && isAdmin && (
             <section className="phase-panel">
@@ -947,6 +1020,80 @@ function App() {
         </>
       )}
     </main>
+  );
+}
+
+function BonusPicksPanel({ users, bonusPicks, currentPick, locked, onChange }) {
+  const sortedUsers = [...users].sort((a, b) => a.name.localeCompare(b.name));
+
+  return (
+    <section className="bonus-layout">
+      <article className={`phase-panel bonus-editor ${locked ? 'locked-card' : ''}`}>
+        <div>
+          <p className="eyebrow">Extras</p>
+          <h2>Pronosticos especiales</h2>
+          <p className="muted">
+            {locked
+              ? 'Captura cerrada desde viernes 19 junio 2026, 11:00 h CDMX.'
+              : 'Disponibles hasta viernes 19 junio 2026, 11:00 h CDMX.'}
+          </p>
+        </div>
+        {locked && (
+          <div className="lock-banner">
+            <Lock size={16} />
+            Edicion cerrada
+          </div>
+        )}
+        <div className="bonus-fields">
+          {bonusFields.map((field) => (
+            <label key={field.key}>
+              {field.label}
+              <input
+                type="text"
+                disabled={locked}
+                value={currentPick[field.key] ?? ''}
+                placeholder={field.placeholder}
+                onChange={(event) => onChange({ [field.key]: event.target.value })}
+              />
+              <span>{field.points} pts</span>
+            </label>
+          ))}
+        </div>
+      </article>
+
+      <article className={`match-card bonus-table-card ${!locked ? 'locked-card' : ''}`}>
+        <div>
+          <p className="eyebrow">Selecciones de todos</p>
+          <h2>Extras registrados</h2>
+        </div>
+        {!locked ? (
+          <div className="hidden-picks">
+            <Eye size={18} />
+            Se mostraran despues del viernes 19 junio 2026, 11:00 h CDMX
+          </div>
+        ) : (
+          <div className="bonus-table">
+            <div className="bonus-table-header">
+              <strong>Jugador</strong>
+              {bonusFields.map((field) => (
+                <strong key={field.key}>{field.label}</strong>
+              ))}
+            </div>
+            {sortedUsers.map((user) => {
+              const pick = bonusPicks[user.email] ?? {};
+              return (
+                <div className="bonus-table-row" key={user.email}>
+                  <strong>{user.name}</strong>
+                  {bonusFields.map((field) => (
+                    <span key={field.key}>{pick[field.key] || 'Sin captura'}</span>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </article>
+    </section>
   );
 }
 

@@ -327,6 +327,11 @@ select {
   font-weight: 900;
 }
 
+.muted {
+  color: #66716c;
+  font-weight: 800;
+}
+
 .phase-panel .select-box {
   width: min(280px, 100%);
 }
@@ -636,6 +641,79 @@ select {
   font-weight: 900;
 }
 
+.bonus-layout {
+  display: grid;
+  gap: 16px;
+}
+
+.bonus-editor {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.bonus-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.bonus-fields label {
+  border-radius: 8px;
+  background: #f5f7f3;
+  padding: 12px;
+}
+
+.bonus-fields label span {
+  width: fit-content;
+  border-radius: 999px;
+  background: #25302d;
+  color: white;
+  padding: 5px 8px;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.bonus-table-card h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.bonus-table {
+  display: grid;
+  gap: 8px;
+}
+
+.bonus-table-header,
+.bonus-table-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.9fr) repeat(3, minmax(150px, 1fr));
+  gap: 10px;
+  align-items: center;
+}
+
+.bonus-table-header {
+  color: #53605b;
+  font-size: 0.82rem;
+}
+
+.bonus-table-row {
+  border-radius: 8px;
+  background: #f5f7f3;
+  padding: 10px 12px;
+}
+
+.bonus-table-row strong,
+.bonus-table-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.bonus-table-row span {
+  color: #1f7a6f;
+  font-weight: 900;
+}
+
 .leaderboard-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
@@ -706,7 +784,10 @@ select {
   .stats-grid,
   .phase-panel,
   .toolbar,
-  .matches {
+  .matches,
+  .bonus-fields,
+  .bonus-table-header,
+  .bonus-table-row {
     grid-template-columns: 1fr;
   }
 
