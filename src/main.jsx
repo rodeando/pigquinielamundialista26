@@ -409,7 +409,7 @@ function App() {
   const loadAppData = async (activeSession = session) => {
     const normalizedSessionEmail = normalizeEmail(activeSession?.user?.email ?? '');
     const adminQuery = normalizedSessionEmail
-      ? supabase.from('admin_users').select('email').eq('email', normalizedSessionEmail).maybeSingle()
+      ? supabase.from('admin_users').select('email').ilike('email', normalizedSessionEmail).maybeSingle()
       : Promise.resolve({ data: null });
     const [
       { data: profiles },
