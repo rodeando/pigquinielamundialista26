@@ -386,7 +386,7 @@ function App() {
   const leaderboard = useMemo(() => {
     return users
       .map((user) => {
-        const userPicks = picks[user.email] ?? {};
+        const userPicks = picks[user.id] ?? {};
         const total = MATCHES.reduce((sum, match) => {
           const pick = userPicks[match.id];
           const result = results[match.id];
@@ -450,8 +450,8 @@ function App() {
     for (const row of picksResult.data ?? []) {
       const user = usersById[row.user_id];
       if (!user) continue;
-      nextPicks[user.email] ??= {};
-      nextPicks[user.email][row.match_id] = {
+      nextPicks[user.id] ??= {};
+      nextPicks[user.id][row.match_id] = {
         outcome: row.outcome,
         homeScore: row.home_score ?? '',
         awayScore: row.away_score ?? '',
@@ -462,7 +462,7 @@ function App() {
     for (const row of bonusResult.data ?? []) {
       const user = usersById[row.user_id];
       if (!user) continue;
-      nextBonusPicks[user.email] = {
+      nextBonusPicks[user.id] = {
         worldChampion: row.world_champion ?? '',
         topScorer: row.top_scorer ?? '',
         bestGoalkeeper: row.best_goalkeeper ?? '',
@@ -619,7 +619,7 @@ function App() {
     const match = MATCHES.find((item) => item.id === matchId);
     const effectiveUnlockedOrder = getEffectiveUnlockedOrder(unlockedOrder, now);
     if (!match || getMatchUnlockOrder(match) > effectiveUnlockedOrder || hasMatchStarted(match, now)) return;
-    const current = picks[currentUser.email]?.[matchId] ?? {};
+    const current = picks[currentUser.id]?.[matchId] ?? {};
     const nextPick = { ...current, ...patch };
     if ('homeScore' in patch || 'awayScore' in patch) {
       const outcome = getOutcome(nextPick.homeScore, nextPick.awayScore);
@@ -627,8 +627,8 @@ function App() {
     }
     const nextPicks = {
       ...picks,
-      [currentUser.email]: {
-        ...(picks[currentUser.email] ?? {}),
+      [currentUser.id]: {
+        ...(picks[currentUser.id] ?? {}),
         [matchId]: nextPick,
       },
     };
@@ -646,11 +646,11 @@ function App() {
 
   const updateBonusPick = async (nextPick) => {
     if (now >= BONUS_DEADLINE_AT) return false;
-    const current = bonusPicks[currentUser.email] ?? {};
+    const current = bonusPicks[currentUser.id] ?? {};
     const savedPick = { ...current, ...nextPick };
     setBonusPicks({
       ...bonusPicks,
-      [currentUser.email]: savedPick,
+      [currentUser.id]: savedPick,
     });
 
     await supabase.from('bonus_picks').upsert({
@@ -686,7 +686,7 @@ function App() {
 
   const effectiveUnlockedOrder = getEffectiveUnlockedOrder(unlockedOrder, now);
   const bonusLocked = now >= BONUS_DEADLINE_AT;
-  const userPickCount = Object.keys(picks[currentUser?.email] ?? {}).length;
+  const userPickCount = Object.keys(picks[currentUser?.id] ?? {}).length;
   const userPosition = leaderboard.findIndex((item) => item.email === currentUser?.email) + 1;
   const userPoints = leaderboard.find((item) => item.email === currentUser?.email)?.points ?? 0;
   const unlockedMatches = MATCHES.filter((match) => getMatchUnlockOrder(match) <= effectiveUnlockedOrder).length;
@@ -945,7 +945,7 @@ function App() {
         <BonusPicksPanel
           users={users}
           bonusPicks={bonusPicks}
-          currentPick={bonusPicks[currentUser.email] ?? {}}
+          currentPick={bonusPicks[currentUser.id] ?? {}}
           locked={bonusLocked}
           onSave={updateBonusPick}
         />
@@ -1015,7 +1015,7 @@ function App() {
                 <PredictionCard
                   key={match.id}
                   match={match}
-                  pick={(picks[currentUser.email] ?? {})[match.id] ?? {}}
+                  pick={(picks[currentUser.id] ?? {})[match.id] ?? {}}
                   result={results[match.id]}
                   locked={getMatchUnlockOrder(match) > effectiveUnlockedOrder || hasMatchStarted(match, now)}
                   lockReason={
@@ -1131,7 +1131,7 @@ function BonusPicksPanel({ users, bonusPicks, currentPick, locked, onSave }) {
               ))}
             </div>
             {sortedUsers.map((user) => {
-              const pick = bonusPicks[user.email] ?? {};
+              const pick = bonusPicks[user.id] ?? {};
               return (
                 <div className="bonus-table-row" key={user.email}>
                   <strong>{user.name}</strong>
@@ -1272,8 +1272,8 @@ function AllPicksCard({ match, users, picks, result, revealed }) {
   const hasResult = hasCompleteScore(result);
   const sortedUsers = [...users].sort((a, b) => {
     if (!hasResult) return a.name.localeCompare(b.name);
-    const pointsA = getPickPoints(picks[a.email]?.[match.id], result) ?? -1;
-    const pointsB = getPickPoints(picks[b.email]?.[match.id], result) ?? -1;
+    const pointsA = getPickPoints(picks[a.id]?.[match.id], result) ?? -1;
+    const pointsB = getPickPoints(picks[b.id]?.[match.id], result) ?? -1;
     return pointsB - pointsA || a.name.localeCompare(b.name);
   });
 
@@ -1306,7 +1306,7 @@ function AllPicksCard({ match, users, picks, result, revealed }) {
           {sortedUsers.length === 0 ? (
             <div className="hidden-picks">No hay participantes cargados.</div>
           ) : sortedUsers.map((user) => {
-            const pick = picks[user.email]?.[match.id];
+            const pick = picks[user.id]?.[match.id];
             const pickPoints = getPickPoints(pick, result);
 
             return (
