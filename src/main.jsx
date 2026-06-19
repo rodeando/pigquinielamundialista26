@@ -1319,8 +1319,9 @@ function AllPicksCard({ match, users, picks, result, revealed }) {
 function ResultCard({ match, result, started, ended, onChange }) {
   const outcome = getOutcome(result.homeScore, result.awayScore);
   const hasResult = hasCompleteScore(result);
+  const resultLocked = hasResult;
   const statusLabel = hasResult
-    ? 'Resultado cargado'
+    ? 'Resultado cerrado'
     : ended
       ? 'Finalizado: falta resultado'
       : started
@@ -1339,7 +1340,7 @@ function ResultCard({ match, result, started, ended, onChange }) {
         <TeamName name={match.away} align="right" />
       </div>
       <div className="prediction-footer">
-        <ScoreInputs value={result} onChange={onChange} />
+        <ScoreInputs value={result} onChange={onChange} disabled={resultLocked} />
         <div className="points-pill">{outcome ? outcomeLabel[outcome] : 'Sin resultado'}</div>
       </div>
     </article>
