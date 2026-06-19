@@ -653,6 +653,8 @@ function App() {
 
   const updateResult = async (matchId, patch) => {
     if (!isAdmin) return;
+    const match = MATCHES.find((item) => item.id === matchId);
+    if (!match || hasMatchStarted(match, now) || hasCompleteScore(results[matchId])) return;
     const nextResult = {
       ...(results[matchId] ?? {}),
       ...patch,
@@ -1319,13 +1321,13 @@ function AllPicksCard({ match, users, picks, result, revealed }) {
 function ResultCard({ match, result, started, ended, onChange }) {
   const outcome = getOutcome(result.homeScore, result.awayScore);
   const hasResult = hasCompleteScore(result);
-  const resultLocked = hasResult;
+  const resultLocked = started || hasResult;
   const statusLabel = hasResult
     ? 'Resultado cerrado'
     : ended
-      ? 'Finalizado: falta resultado'
+      ? 'Finalizado: bloqueado'
       : started
-        ? 'En juego'
+        ? 'En juego: bloqueado'
         : 'Por iniciar';
 
   return (
