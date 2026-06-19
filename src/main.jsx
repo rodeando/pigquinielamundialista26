@@ -38,7 +38,7 @@ const APP_TIME_ZONE = 'America/Mexico_City';
 const APP_TIME_ZONE_LABEL = 'CDMX';
 const APP_UTC_OFFSET = '-06:00';
 const MATCH_DURATION_MINUTES = 120;
-const BONUS_DEADLINE_AT = new Date('2026-06-19T11:00:00-06:00').getTime();
+const BONUS_DEADLINE_AT = new Date('2026-06-19T23:59:00-06:00').getTime();
 
 const bonusFields = [
   {
@@ -1047,8 +1047,8 @@ function BonusPicksPanel({ users, bonusPicks, currentPick, locked, onSave }) {
           <h2>Pronosticos especiales</h2>
           <p className="muted">
             {locked
-              ? 'Captura cerrada desde viernes 19 junio 2026, 11:00 h CDMX.'
-              : 'Disponibles hasta viernes 19 junio 2026, 11:00 h CDMX.'}
+              ? 'Captura cerrada desde viernes 19 junio 2026, 23:59 h CDMX.'
+              : 'Disponibles hasta viernes 19 junio 2026, 23:59 h CDMX.'}
           </p>
         </div>
         {locked && (
@@ -1092,7 +1092,7 @@ function BonusPicksPanel({ users, bonusPicks, currentPick, locked, onSave }) {
         {!locked ? (
           <div className="hidden-picks">
             <Eye size={18} />
-            Se mostraran despues del viernes 19 junio 2026, 11:00 h CDMX
+            Se mostraran despues del viernes 19 junio 2026, 23:59 h CDMX
           </div>
         ) : (
           <div className="bonus-table">

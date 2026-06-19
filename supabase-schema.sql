@@ -120,7 +120,7 @@ on public.bonus_picks for select
 to authenticated
 using (
   auth.uid() = user_id
-  or now() >= '2026-06-19 11:00:00-06'::timestamptz
+  or now() >= '2026-06-19 23:59:00-06'::timestamptz
 );
 
 drop policy if exists "Users can insert their bonus picks before deadline" on public.bonus_picks;
@@ -129,7 +129,7 @@ on public.bonus_picks for insert
 to authenticated
 with check (
   auth.uid() = user_id
-  and now() < '2026-06-19 11:00:00-06'::timestamptz
+  and now() < '2026-06-19 23:59:00-06'::timestamptz
 );
 
 drop policy if exists "Users can update their bonus picks before deadline" on public.bonus_picks;
@@ -139,7 +139,7 @@ to authenticated
 using (auth.uid() = user_id)
 with check (
   auth.uid() = user_id
-  and now() < '2026-06-19 11:00:00-06'::timestamptz
+  and now() < '2026-06-19 23:59:00-06'::timestamptz
 );
 
 drop policy if exists "Results are visible to authenticated users" on public.results;
