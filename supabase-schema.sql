@@ -76,6 +76,18 @@ alter table public.results enable row level security;
 alter table public.app_settings enable row level security;
 alter table public.admin_users enable row level security;
 
+grant select on public.profiles to authenticated;
+grant insert, update on public.profiles to authenticated;
+grant select on public.picks to authenticated;
+grant insert, update on public.picks to authenticated;
+grant select on public.bonus_picks to authenticated;
+grant insert, update on public.bonus_picks to authenticated;
+grant select on public.results to authenticated;
+grant insert, update on public.results to authenticated;
+grant select on public.app_settings to authenticated;
+grant insert, update on public.app_settings to authenticated;
+grant select on public.admin_users to authenticated;
+
 drop policy if exists "Profiles are visible to authenticated users" on public.profiles;
 create policy "Profiles are visible to authenticated users"
 on public.profiles for select

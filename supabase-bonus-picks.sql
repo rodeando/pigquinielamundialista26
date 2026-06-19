@@ -8,6 +8,9 @@ create table if not exists public.bonus_picks (
 
 alter table public.bonus_picks enable row level security;
 
+grant select on public.bonus_picks to authenticated;
+grant insert, update on public.bonus_picks to authenticated;
+
 drop policy if exists "Bonus picks are visible to authenticated users" on public.bonus_picks;
 create policy "Bonus picks are visible to authenticated users"
 on public.bonus_picks for select

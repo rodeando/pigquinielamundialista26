@@ -76,6 +76,10 @@ const writeStorage = (key, value) => localStorage.setItem(key, JSON.stringify(va
 
 const normalizeEmail = (email) => email.trim().toLowerCase();
 
+const logSupabaseError = (label, error) => {
+  if (error) console.error(`Supabase ${label} error:`, error);
+};
+
 const getAuthErrorMessage = (error) => {
   const message = error?.message?.toLowerCase() ?? '';
 
@@ -411,14 +415,7 @@ function App() {
     const adminQuery = normalizedSessionEmail
       ? supabase.from('admin_users').select('email').ilike('email', normalizedSessionEmail).maybeSingle()
       : Promise.resolve({ data: null });
-    const [
-      { data: profiles },
-      { data: pickRows },
-      { data: bonusRows },
-      { data: resultRows },
-      { data: settingRows },
-      { data: adminRow },
-    ] = await Promise.all([
+    const [profilesResult, picksResult, bonusResult, resultsResult, settingsResult, adminResult] = await Promise.all([
       supabase.from('profiles').select('id,email,name').order('name'),
       supabase.from('picks').select('user_id,match_id,outcome,home_score,away_score'),
       supabase.from('bonus_picks').select('user_id,world_champion,top_scorer,best_goalkeeper'),
@@ -427,11 +424,18 @@ function App() {
       adminQuery,
     ]);
 
-    const nextUsers = profiles ?? [];
+    logSupabaseError('profiles', profilesResult.error);
+    logSupabaseError('picks', picksResult.error);
+    logSupabaseError('bonus_picks', bonusResult.error);
+    logSupabaseError('results', resultsResult.error);
+    logSupabaseError('app_settings', settingsResult.error);
+    logSupabaseError('admin_users', adminResult.error);
+
+    const nextUsers = profilesResult.data ?? [];
     const usersById = Object.fromEntries(nextUsers.map((user) => [user.id, user]));
     const nextPicks = {};
 
-    for (const row of pickRows ?? []) {
+    for (const row of picksResult.data ?? []) {
       const user = usersById[row.user_id];
       if (!user) continue;
       nextPicks[user.email] ??= {};
@@ -443,7 +447,7 @@ function App() {
     }
 
     const nextBonusPicks = {};
-    for (const row of bonusRows ?? []) {
+    for (const row of bonusResult.data ?? []) {
       const user = usersById[row.user_id];
       if (!user) continue;
       nextBonusPicks[user.email] = {
@@ -454,7 +458,7 @@ function App() {
     }
 
     const nextResults = {};
-    for (const row of resultRows ?? []) {
+    for (const row of resultsResult.data ?? []) {
       nextResults[row.match_id] = {
         homeScore: row.home_score ?? '',
         awayScore: row.away_score ?? '',
@@ -465,8 +469,8 @@ function App() {
     setPicks(nextPicks);
     setBonusPicks(nextBonusPicks);
     setResults(nextResults);
-    setUnlockedOrder(Number(settingRows?.[0]?.value ?? 1));
-    setIsAdmin(Boolean(adminRow));
+    setUnlockedOrder(Number(settingsResult.data?.[0]?.value ?? 1));
+    setIsAdmin(Boolean(adminResult.data));
   };
 
   const saveUnlockedOrder = async (nextOrder) => {
