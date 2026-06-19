@@ -80,6 +80,11 @@ const logSupabaseError = (label, error) => {
   if (error) console.error(`Supabase ${label} error:`, error);
 };
 
+const getSupabaseErrorSummary = (resultsByLabel) =>
+  Object.entries(resultsByLabel)
+    .filter(([, result]) => result?.error)
+    .map(([label, result]) => `${label}: ${result.error.message}`);
+
 const getAuthErrorMessage = (error) => {
   const message = error?.message?.toLowerCase() ?? '';
 
@@ -300,6 +305,7 @@ function App() {
   const [showAccountPanel, setShowAccountPanel] = useState(false);
   const [accountError, setAccountError] = useState('');
   const [accountNotice, setAccountNotice] = useState('');
+  const [dataErrors, setDataErrors] = useState([]);
   const [now, setNow] = useState(() => Date.now());
   const [isAdmin, setIsAdmin] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(
@@ -334,6 +340,7 @@ function App() {
         setPicks({});
         setBonusPicks({});
         setResults({});
+        setDataErrors([]);
         setIsAdmin(false);
       }
     });
@@ -424,12 +431,17 @@ function App() {
       adminQuery,
     ]);
 
-    logSupabaseError('profiles', profilesResult.error);
-    logSupabaseError('picks', picksResult.error);
-    logSupabaseError('bonus_picks', bonusResult.error);
-    logSupabaseError('results', resultsResult.error);
-    logSupabaseError('app_settings', settingsResult.error);
-    logSupabaseError('admin_users', adminResult.error);
+    const queryResults = {
+      profiles: profilesResult,
+      picks: picksResult,
+      bonus_picks: bonusResult,
+      results: resultsResult,
+      app_settings: settingsResult,
+      admin_users: adminResult,
+    };
+
+    Object.entries(queryResults).forEach(([label, result]) => logSupabaseError(label, result.error));
+    setDataErrors(getSupabaseErrorSummary(queryResults));
 
     const nextUsers = profilesResult.data ?? [];
     const usersById = Object.fromEntries(nextUsers.map((user) => [user.id, user]));
@@ -897,6 +909,16 @@ function App() {
         </section>
       )}
 
+      {dataErrors.length > 0 && (
+        <section className="phase-panel data-alert">
+          <div>
+            <p className="eyebrow">Supabase</p>
+            <h2>Hay tablas sin cargar</h2>
+            <p>Revisa permisos RLS o ejecuta el bloque de grants. Detalle: {dataErrors.join(' | ')}</p>
+          </div>
+        </section>
+      )}
+
       <nav className="tabs">
         <button className={activeTab === 'quiniela' ? 'active' : ''} onClick={() => setActiveTab('quiniela')}>
           Pig Quiniela Mundialista 26
@@ -1281,7 +1303,9 @@ function AllPicksCard({ match, users, picks, result, revealed }) {
       )}
       {revealed ? (
         <div className="all-picks-list">
-          {sortedUsers.map((user) => {
+          {sortedUsers.length === 0 ? (
+            <div className="hidden-picks">No hay participantes cargados.</div>
+          ) : sortedUsers.map((user) => {
             const pick = picks[user.email]?.[match.id];
             const pickPoints = getPickPoints(pick, result);
 
@@ -1370,19 +1394,23 @@ function Leaderboard({ leaderboard }) {
     <section className="leaderboard-layout">
       <div className="chart-panel">
         <h2>Ranking de puntos</h2>
-        <ResponsiveContainer width="100%" height={320}>
-          <BarChart data={chartData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }} barCategoryGap="38%">
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="name" />
-            <YAxis allowDecimals={false} />
-            <Tooltip />
-            <Bar dataKey="points" barSize={24} radius={[4, 4, 0, 0]}>
-              {chartData.map((item) => (
-                <Cell key={item.email} fill={item.color} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        {chartData.length === 0 ? (
+          <div className="empty-state">No hay participantes cargados.</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={320}>
+            <BarChart data={chartData} margin={{ top: 10, right: 12, left: -18, bottom: 0 }} barCategoryGap="38%">
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="name" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Bar dataKey="points" barSize={24} radius={[4, 4, 0, 0]}>
+                {chartData.map((item) => (
+                  <Cell key={item.email} fill={item.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </div>
       <div className="ranking-list">
         {chartData.map((item, index) => (

@@ -327,6 +327,16 @@ select {
   font-weight: 900;
 }
 
+.data-alert {
+  border-color: rgba(166, 61, 44, 0.28);
+  background: #fff7f4;
+}
+
+.data-alert h2,
+.data-alert p {
+  color: #a63d2c;
+}
+
 .muted {
   color: #66716c;
   font-weight: 800;
@@ -637,6 +647,16 @@ select {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  color: #66716c;
+  font-weight: 900;
+}
+
+.empty-state {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: #f5f7f3;
   color: #66716c;
   font-weight: 900;
 }
