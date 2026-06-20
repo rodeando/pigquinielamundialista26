@@ -316,7 +316,6 @@ function App() {
   const [accountError, setAccountError] = useState('');
   const [accountNotice, setAccountNotice] = useState('');
   const [dataErrors, setDataErrors] = useState([]);
-  const [dataStats, setDataStats] = useState(null);
   const [now, setNow] = useState(() => Date.now());
   const [isAdmin, setIsAdmin] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(
@@ -352,7 +351,6 @@ function App() {
         setBonusPicks({});
         setResults({});
         setDataErrors([]);
-        setDataStats(null);
         setIsAdmin(false);
       }
     });
@@ -455,14 +453,6 @@ function App() {
 
     Object.entries(queryResults).forEach(([label, result]) => logSupabaseError(label, result.error));
     setDataErrors(getSupabaseErrorSummary(queryResults));
-    setDataStats({
-      profiles: profilesResult.data?.length ?? 0,
-      picks: picksResult.data?.length ?? 0,
-      bonusPicks: bonusResult.data?.length ?? 0,
-      results: resultsResult.data?.length ?? 0,
-      settings: settingsResult.data?.length ?? 0,
-      admin: adminResult.data ? 1 : 0,
-    });
 
     const nextUsers = profilesResult.data ?? [];
     if (sessionProfile && !nextUsers.some((user) => user.id === sessionProfile.id)) {
@@ -669,22 +659,29 @@ function App() {
   };
 
   const updateBonusPick = async (nextPick) => {
-    if (now >= BONUS_DEADLINE_AT) return false;
+    if (now >= BONUS_DEADLINE_AT) {
+      return { ok: false, message: 'La captura de extras ya esta cerrada.' };
+    }
     const current = bonusPicks[currentUser.id] ?? {};
     const savedPick = { ...current, ...nextPick };
-    setBonusPicks({
-      ...bonusPicks,
-      [currentUser.id]: savedPick,
-    });
 
-    await supabase.from('bonus_picks').upsert({
+    const { error } = await supabase.from('bonus_picks').upsert({
       user_id: currentUser.id,
       world_champion: savedPick.worldChampion?.trim() || null,
       top_scorer: savedPick.topScorer?.trim() || null,
       best_goalkeeper: savedPick.bestGoalkeeper?.trim() || null,
       updated_at: new Date().toISOString(),
     });
-    return true;
+
+    if (error) {
+      return { ok: false, message: getAuthErrorMessage(error) };
+    }
+
+    setBonusPicks({
+      ...bonusPicks,
+      [currentUser.id]: savedPick,
+    });
+    return { ok: true, message: 'Resultados guardados.' };
   };
 
   const updateResult = async (matchId, patch) => {
@@ -943,19 +940,6 @@ function App() {
         </section>
       )}
 
-      {dataStats && (
-        <section className="phase-panel data-debug">
-          <div>
-            <p className="eyebrow">Diagnostico</p>
-            <h2>Datos recibidos por la app</h2>
-            <p>
-              Perfiles: {dataStats.profiles} | Quinielas: {dataStats.picks} | Resultados: {dataStats.results} | Extras:{' '}
-              {dataStats.bonusPicks} | Settings: {dataStats.settings} | Admin: {dataStats.admin}
-            </p>
-          </div>
-        </section>
-      )}
-
       <nav className="tabs">
         <button className={activeTab === 'quiniela' ? 'active' : ''} onClick={() => setActiveTab('quiniela')}>
           Pig Quiniela Mundialista 26
@@ -1100,8 +1084,8 @@ function BonusPicksPanel({ users, bonusPicks, currentPick, locked, onSave }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    const saved = await onSave(draft);
-    setNotice(saved ? 'Resultados guardados.' : '');
+    const result = await onSave(draft);
+    setNotice(result.message);
   };
 
   return (
@@ -1145,7 +1129,7 @@ function BonusPicksPanel({ users, bonusPicks, currentPick, locked, onSave }) {
             <Check size={18} />
             Guardar resultados
           </button>
-          {notice && <p className="notice">{notice}</p>}
+          {notice && <p className={notice === 'Resultados guardados.' ? 'notice' : 'error'}>{notice}</p>}
         </div>
       </form>
 

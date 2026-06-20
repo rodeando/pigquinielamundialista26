@@ -337,16 +337,6 @@ select {
   color: #a63d2c;
 }
 
-.data-debug {
-  background: #f5f7f3;
-  box-shadow: none;
-}
-
-.data-debug h2,
-.data-debug p {
-  color: #52615c;
-}
-
 .muted {
   color: #66716c;
   font-weight: 800;
