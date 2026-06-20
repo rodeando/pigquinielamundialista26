@@ -76,6 +76,16 @@ const writeStorage = (key, value) => localStorage.setItem(key, JSON.stringify(va
 
 const normalizeEmail = (email) => email.trim().toLowerCase();
 
+const getSessionProfile = (activeSession) => {
+  const email = normalizeEmail(activeSession?.user?.email ?? '');
+  if (!activeSession?.user?.id || !email) return null;
+  return {
+    id: activeSession.user.id,
+    email,
+    name: activeSession.user.user_metadata?.name ?? email.split('@')[0],
+  };
+};
+
 const logSupabaseError = (label, error) => {
   if (error) console.error(`Supabase ${label} error:`, error);
 };
@@ -313,7 +323,7 @@ function App() {
     () => typeof Notification !== 'undefined' && Notification.permission === 'granted',
   );
 
-  const currentUser = users.find((user) => user.id === session?.user?.id);
+  const currentUser = users.find((user) => user.id === session?.user?.id) ?? getSessionProfile(session);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -421,6 +431,7 @@ function App() {
 
   const loadAppData = async (activeSession = session) => {
     const normalizedSessionEmail = normalizeEmail(activeSession?.user?.email ?? '');
+    const sessionProfile = getSessionProfile(activeSession);
     const adminQuery = normalizedSessionEmail
       ? supabase.from('admin_users').select('email').ilike('email', normalizedSessionEmail).maybeSingle()
       : Promise.resolve({ data: null });
@@ -454,6 +465,9 @@ function App() {
     });
 
     const nextUsers = profilesResult.data ?? [];
+    if (sessionProfile && !nextUsers.some((user) => user.id === sessionProfile.id)) {
+      nextUsers.push(sessionProfile);
+    }
     const usersById = Object.fromEntries(nextUsers.map((user) => [user.id, user]));
     const nextPicks = {};
 
@@ -929,7 +943,7 @@ function App() {
         </section>
       )}
 
-      {isAdmin && dataStats && (
+      {dataStats && (
         <section className="phase-panel data-debug">
           <div>
             <p className="eyebrow">Diagnostico</p>
