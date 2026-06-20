@@ -306,6 +306,7 @@ function App() {
   const [accountError, setAccountError] = useState('');
   const [accountNotice, setAccountNotice] = useState('');
   const [dataErrors, setDataErrors] = useState([]);
+  const [dataStats, setDataStats] = useState(null);
   const [now, setNow] = useState(() => Date.now());
   const [isAdmin, setIsAdmin] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(
@@ -341,6 +342,7 @@ function App() {
         setBonusPicks({});
         setResults({});
         setDataErrors([]);
+        setDataStats(null);
         setIsAdmin(false);
       }
     });
@@ -442,6 +444,14 @@ function App() {
 
     Object.entries(queryResults).forEach(([label, result]) => logSupabaseError(label, result.error));
     setDataErrors(getSupabaseErrorSummary(queryResults));
+    setDataStats({
+      profiles: profilesResult.data?.length ?? 0,
+      picks: picksResult.data?.length ?? 0,
+      bonusPicks: bonusResult.data?.length ?? 0,
+      results: resultsResult.data?.length ?? 0,
+      settings: settingsResult.data?.length ?? 0,
+      admin: adminResult.data ? 1 : 0,
+    });
 
     const nextUsers = profilesResult.data ?? [];
     const usersById = Object.fromEntries(nextUsers.map((user) => [user.id, user]));
@@ -915,6 +925,19 @@ function App() {
             <p className="eyebrow">Supabase</p>
             <h2>Hay tablas sin cargar</h2>
             <p>Revisa permisos RLS o ejecuta el bloque de grants. Detalle: {dataErrors.join(' | ')}</p>
+          </div>
+        </section>
+      )}
+
+      {isAdmin && dataStats && (
+        <section className="phase-panel data-debug">
+          <div>
+            <p className="eyebrow">Diagnostico</p>
+            <h2>Datos recibidos por la app</h2>
+            <p>
+              Perfiles: {dataStats.profiles} | Quinielas: {dataStats.picks} | Resultados: {dataStats.results} | Extras:{' '}
+              {dataStats.bonusPicks} | Settings: {dataStats.settings} | Admin: {dataStats.admin}
+            </p>
           </div>
         </section>
       )}
