@@ -38,8 +38,8 @@ const APP_TIME_ZONE = 'America/Mexico_City';
 const APP_TIME_ZONE_LABEL = 'CDMX';
 const APP_UTC_OFFSET = '-06:00';
 const MATCH_DURATION_MINUTES = 120;
-const BONUS_DEADLINE_AT = new Date('2026-06-21T23:59:00-06:00').getTime();
-const BONUS_DEADLINE_LABEL = 'domingo 21 junio 2026, 23:59 h CDMX';
+const BONUS_DEADLINE_AT = new Date('2026-06-22T00:59:00-06:00').getTime();
+const BONUS_DEADLINE_LABEL = 'lunes 22 junio 2026, 00:59 h CDMX';
 
 const bonusFields = [
   {
