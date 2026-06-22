@@ -96,6 +96,8 @@ const getSupabaseErrorSummary = (resultsByLabel) =>
     .filter(([, result]) => result?.error)
     .map(([label, result]) => `${label}: ${result.error.message}`);
 
+const getDbErrorMessage = (error) => error?.message ?? 'No se pudo guardar. Intenta de nuevo.';
+
 const getAuthErrorMessage = (error) => {
   const message = error?.message?.toLowerCase() ?? '';
 
@@ -666,21 +668,38 @@ function App() {
     const current = bonusPicks[currentUser.id] ?? {};
     const savedPick = { ...current, ...nextPick };
 
+    const payload = {
+      user_id: currentUser.id,
+      world_champion: savedPick.worldChampion?.trim() || null,
+      top_scorer: savedPick.topScorer?.trim() || null,
+      best_goalkeeper: savedPick.bestGoalkeeper?.trim() || null,
+      updated_at: new Date().toISOString(),
+    };
     let error = null;
     try {
-      ({ error } = await supabase.from('bonus_picks').upsert({
-        user_id: currentUser.id,
-        world_champion: savedPick.worldChampion?.trim() || null,
-        top_scorer: savedPick.topScorer?.trim() || null,
-        best_goalkeeper: savedPick.bestGoalkeeper?.trim() || null,
-        updated_at: new Date().toISOString(),
-      }));
+      ({ error } = await supabase.from('bonus_picks').upsert(payload, { onConflict: 'user_id' }));
+      if (error) {
+        const insertResult = await supabase.from('bonus_picks').insert(payload);
+        error = insertResult.error;
+      }
+      if (error?.code === '23505') {
+        const updateResult = await supabase
+          .from('bonus_picks')
+          .update({
+            world_champion: payload.world_champion,
+            top_scorer: payload.top_scorer,
+            best_goalkeeper: payload.best_goalkeeper,
+            updated_at: payload.updated_at,
+          })
+          .eq('user_id', currentUser.id);
+        error = updateResult.error;
+      }
     } catch (requestError) {
-      return { ok: false, message: requestError.message ?? 'No se pudo guardar. Intenta de nuevo.' };
+      return { ok: false, message: getDbErrorMessage(requestError) };
     }
 
     if (error) {
-      return { ok: false, message: getAuthErrorMessage(error) };
+      return { ok: false, message: getDbErrorMessage(error) };
     }
 
     setBonusPicks({

@@ -133,23 +133,19 @@ to authenticated
 using (true);
 
 drop policy if exists "Users can insert their bonus picks before deadline" on public.bonus_picks;
-create policy "Users can insert their bonus picks before deadline"
+drop policy if exists "Users can insert their bonus picks" on public.bonus_picks;
+create policy "Users can insert their bonus picks"
 on public.bonus_picks for insert
 to authenticated
-with check (
-  auth.uid() = user_id
-  and now() < '2026-06-21 23:59:00-06'::timestamptz
-);
+with check (auth.uid() = user_id);
 
 drop policy if exists "Users can update their bonus picks before deadline" on public.bonus_picks;
-create policy "Users can update their bonus picks before deadline"
+drop policy if exists "Users can update their bonus picks" on public.bonus_picks;
+create policy "Users can update their bonus picks"
 on public.bonus_picks for update
 to authenticated
 using (auth.uid() = user_id)
-with check (
-  auth.uid() = user_id
-  and now() < '2026-06-21 23:59:00-06'::timestamptz
-);
+with check (auth.uid() = user_id);
 
 drop policy if exists "Results are visible to authenticated users" on public.results;
 create policy "Results are visible to authenticated users"
