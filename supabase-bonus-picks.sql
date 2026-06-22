@@ -23,7 +23,7 @@ on public.bonus_picks for insert
 to authenticated
 with check (
   auth.uid() = user_id
-  and now() < '2026-06-19 23:59:00-06'::timestamptz
+  and now() < '2026-06-21 23:59:00-06'::timestamptz
 );
 
 drop policy if exists "Users can update their bonus picks before deadline" on public.bonus_picks;
@@ -33,5 +33,5 @@ to authenticated
 using (auth.uid() = user_id)
 with check (
   auth.uid() = user_id
-  and now() < '2026-06-19 23:59:00-06'::timestamptz
+  and now() < '2026-06-21 23:59:00-06'::timestamptz
 );

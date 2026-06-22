@@ -38,7 +38,8 @@ const APP_TIME_ZONE = 'America/Mexico_City';
 const APP_TIME_ZONE_LABEL = 'CDMX';
 const APP_UTC_OFFSET = '-06:00';
 const MATCH_DURATION_MINUTES = 120;
-const BONUS_DEADLINE_AT = new Date('2026-06-19T23:59:00-06:00').getTime();
+const BONUS_DEADLINE_AT = new Date('2026-06-21T23:59:00-06:00').getTime();
+const BONUS_DEADLINE_LABEL = 'domingo 21 junio 2026, 23:59 h CDMX';
 
 const bonusFields = [
   {
@@ -665,13 +666,18 @@ function App() {
     const current = bonusPicks[currentUser.id] ?? {};
     const savedPick = { ...current, ...nextPick };
 
-    const { error } = await supabase.from('bonus_picks').upsert({
-      user_id: currentUser.id,
-      world_champion: savedPick.worldChampion?.trim() || null,
-      top_scorer: savedPick.topScorer?.trim() || null,
-      best_goalkeeper: savedPick.bestGoalkeeper?.trim() || null,
-      updated_at: new Date().toISOString(),
-    });
+    let error = null;
+    try {
+      ({ error } = await supabase.from('bonus_picks').upsert({
+        user_id: currentUser.id,
+        world_champion: savedPick.worldChampion?.trim() || null,
+        top_scorer: savedPick.topScorer?.trim() || null,
+        best_goalkeeper: savedPick.bestGoalkeeper?.trim() || null,
+        updated_at: new Date().toISOString(),
+      }));
+    } catch (requestError) {
+      return { ok: false, message: requestError.message ?? 'No se pudo guardar. Intenta de nuevo.' };
+    }
 
     if (error) {
       return { ok: false, message: getAuthErrorMessage(error) };
@@ -1096,8 +1102,8 @@ function BonusPicksPanel({ users, bonusPicks, currentPick, locked, onSave }) {
           <h2>Pronosticos especiales</h2>
           <p className="muted">
             {locked
-              ? 'Captura cerrada desde viernes 19 junio 2026, 23:59 h CDMX.'
-              : 'Disponibles hasta viernes 19 junio 2026, 23:59 h CDMX.'}
+              ? `Captura cerrada desde ${BONUS_DEADLINE_LABEL}.`
+              : `Disponibles hasta ${BONUS_DEADLINE_LABEL}.`}
           </p>
         </div>
         {locked && (
@@ -1141,7 +1147,7 @@ function BonusPicksPanel({ users, bonusPicks, currentPick, locked, onSave }) {
         {!locked ? (
           <div className="hidden-picks">
             <Eye size={18} />
-            Se mostraran despues del viernes 19 junio 2026, 23:59 h CDMX
+            Se mostraran despues del {BONUS_DEADLINE_LABEL}
           </div>
         ) : (
           <div className="bonus-table">
