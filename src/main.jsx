@@ -5,6 +5,7 @@ import {
   Bell,
   Check,
   ChevronDown,
+  ChevronUp,
   Eye,
   EyeOff,
   KeyRound,
@@ -211,8 +212,6 @@ const flagMap = {
   Uzbekistan: '🇺🇿',
 };
 
-const stageOptions = ['Todos', ...new Set(MATCHES.map((match) => match.stage))];
-
 const unlockPhases = [
   { order: 1, label: 'Jornada 1 grupos' },
   { order: 2, label: 'Jornada 2 grupos' },
@@ -227,6 +226,7 @@ const unlockPhases = [
 
 const scheduledPhaseUnlocks = [
   { order: 2, startsAt: new Date('2026-06-17T22:00:00-06:00').getTime() },
+  { order: 9, startsAt: new Date('2026-06-23T00:00:00-06:00').getTime() },
 ];
 
 const getEffectiveUnlockedOrder = (manualOrder, now = Date.now()) =>
@@ -250,6 +250,13 @@ const getMatchUnlockOrder = (match) => {
   if (match.id <= 72) return 3;
   return knockoutOrder[match.stage] ?? 9;
 };
+
+const matchGroups = [
+  { key: 'jornada1', label: 'Jornada 1', orders: [1] },
+  { key: 'jornada2', label: 'Jornada 2', orders: [2] },
+  { key: 'jornada3', label: 'Jornada 3', orders: [3] },
+  { key: 'finales', label: 'Fases finales', orders: [4, 5, 6, 7, 8, 9] },
+];
 
 const monthMap = {
   enero: '01',
@@ -313,6 +320,7 @@ function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [query, setQuery] = useState('');
   const [stage, setStage] = useState('Todos');
+  const [matchGroup, setMatchGroup] = useState('jornada3');
   const [activeTab, setActiveTab] = useState('quiniela');
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [showAccountPanel, setShowAccountPanel] = useState(false);
@@ -321,6 +329,7 @@ function App() {
   const [dataErrors, setDataErrors] = useState([]);
   const [now, setNow] = useState(() => Date.now());
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     () => typeof Notification !== 'undefined' && Notification.permission === 'granted',
   );
@@ -393,6 +402,13 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const handleScroll = () => setShowBackToTop(window.scrollY > 360);
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
     if (!isAdmin && activeTab === 'resultados') setActiveTab('quiniela');
   }, [activeTab, isAdmin]);
 
@@ -416,9 +432,19 @@ function App() {
       .sort((a, b) => b.points - a.points || b.picks - a.picks || a.name.localeCompare(b.name));
   }, [users, picks, results]);
 
+  const stageOptions = useMemo(() => {
+    const selectedGroup = matchGroups.find((group) => group.key === matchGroup) ?? matchGroups[0];
+    const stages = MATCHES.filter((match) => selectedGroup.orders.includes(getMatchUnlockOrder(match))).map(
+      (match) => match.stage,
+    );
+    return ['Todos', ...new Set(stages)];
+  }, [matchGroup]);
+
   const visibleMatches = useMemo(() => {
+    const selectedGroup = matchGroups.find((group) => group.key === matchGroup) ?? matchGroups[0];
     const term = query.trim().toLowerCase();
     return MATCHES.filter((match) => {
+      const groupMatch = selectedGroup.orders.includes(getMatchUnlockOrder(match));
       const stageMatch = stage === 'Todos' || match.stage === stage;
       const queryMatch =
         !term ||
@@ -426,9 +452,9 @@ function App() {
           .join(' ')
           .toLowerCase()
           .includes(term);
-      return stageMatch && queryMatch;
+      return groupMatch && stageMatch && queryMatch;
     });
-  }, [query, stage]);
+  }, [matchGroup, query, stage]);
 
   const loadAppData = async (activeSession = session) => {
     const normalizedSessionEmail = normalizeEmail(activeSession?.user?.email ?? '');
@@ -1036,6 +1062,22 @@ function App() {
             </section>
           )}
 
+          <section className="match-group-tabs" aria-label="Jornadas y fases">
+            {matchGroups.map((group) => (
+              <button
+                key={group.key}
+                type="button"
+                className={matchGroup === group.key ? 'active' : ''}
+                onClick={() => {
+                  setMatchGroup(group.key);
+                  setStage('Todos');
+                }}
+              >
+                {group.label}
+              </button>
+            ))}
+          </section>
+
           <section className="toolbar">
             <label className="search-box">
               <Search size={18} />
@@ -1093,6 +1135,17 @@ function App() {
             )}
           </section>
         </>
+      )}
+
+      {showBackToTop && (
+        <button
+          className="back-to-top"
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          aria-label="Ir arriba"
+        >
+          <ChevronUp size={24} />
+        </button>
       )}
     </main>
   );

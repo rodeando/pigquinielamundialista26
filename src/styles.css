@@ -304,6 +304,33 @@ select {
   width: fit-content;
 }
 
+.match-group-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: fit-content;
+  margin: 0 0 14px;
+  padding: 4px;
+  border-radius: 8px;
+  background: #e7ebe7;
+}
+
+.match-group-tabs button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #52615c;
+  padding: 0 14px;
+  font-weight: 900;
+}
+
+.match-group-tabs button.active {
+  background: white;
+  color: #1f7a6f;
+  box-shadow: 0 5px 18px rgba(31, 122, 111, 0.13);
+}
+
 .phase-panel {
   display: flex;
   align-items: center;
@@ -801,6 +828,26 @@ select {
   color: #9a6d20;
 }
 
+.back-to-top {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 30;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: #1f7a6f;
+  color: white;
+  box-shadow: 0 14px 32px rgba(18, 23, 30, 0.24);
+}
+
+.back-to-top:hover {
+  background: #17665d;
+}
+
 @media (max-width: 1050px) {
   .matches {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -876,6 +923,20 @@ select {
 
   .tabs button {
     flex: 1;
+  }
+
+  .match-group-tabs {
+    width: 100%;
+  }
+
+  .match-group-tabs button {
+    flex: 1 1 calc(50% - 4px);
+    padding: 0 10px;
+  }
+
+  .back-to-top {
+    right: 14px;
+    bottom: 14px;
   }
 
   .all-pick-row {
