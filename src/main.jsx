@@ -258,6 +258,161 @@ const matchGroups = [
   { key: 'finales', label: 'Fases finales', orders: [4, 5, 6, 7, 8, 9] },
 ];
 
+const groupLetters = 'ABCDEFGHIJKL'.split('');
+
+const makeTeamStats = (team, group) => ({
+  team,
+  group,
+  played: 0,
+  wins: 0,
+  draws: 0,
+  losses: 0,
+  goalsFor: 0,
+  goalsAgainst: 0,
+  goalDifference: 0,
+  points: 0,
+});
+
+const compareStandings = (a, b) =>
+  b.points - a.points ||
+  b.goalDifference - a.goalDifference ||
+  b.goalsFor - a.goalsFor ||
+  b.wins - a.wins ||
+  a.team.localeCompare(b.team);
+
+const getTeamStats = (teams, team, group) => {
+  if (!teams.has(team)) teams.set(team, makeTeamStats(team, group));
+  return teams.get(team);
+};
+
+const applyGroupResult = (homeStats, awayStats, result) => {
+  const homeScore = Number(result.homeScore);
+  const awayScore = Number(result.awayScore);
+
+  homeStats.played += 1;
+  awayStats.played += 1;
+  homeStats.goalsFor += homeScore;
+  homeStats.goalsAgainst += awayScore;
+  awayStats.goalsFor += awayScore;
+  awayStats.goalsAgainst += homeScore;
+  homeStats.goalDifference = homeStats.goalsFor - homeStats.goalsAgainst;
+  awayStats.goalDifference = awayStats.goalsFor - awayStats.goalsAgainst;
+
+  if (homeScore > awayScore) {
+    homeStats.wins += 1;
+    awayStats.losses += 1;
+    homeStats.points += 3;
+  } else if (awayScore > homeScore) {
+    awayStats.wins += 1;
+    homeStats.losses += 1;
+    awayStats.points += 3;
+  } else {
+    homeStats.draws += 1;
+    awayStats.draws += 1;
+    homeStats.points += 1;
+    awayStats.points += 1;
+  }
+};
+
+const buildGroupStandings = (results) => {
+  const groups = {};
+  const thirdPlaceTeams = [];
+
+  for (const group of groupLetters) {
+    const groupMatches = MATCHES.filter((match) => match.group === group);
+    const teams = new Map();
+    let completedMatches = 0;
+
+    groupMatches.forEach((match) => {
+      const homeStats = getTeamStats(teams, match.home, group);
+      const awayStats = getTeamStats(teams, match.away, group);
+      const result = results[match.id];
+
+      if (!hasCompleteScore(result)) return;
+
+      completedMatches += 1;
+      applyGroupResult(homeStats, awayStats, result);
+    });
+
+    const standings = [...teams.values()].sort(compareStandings);
+    const isComplete = groupMatches.length > 0 && completedMatches === groupMatches.length;
+    groups[group] = { group, standings, isComplete };
+
+    if (isComplete && standings[2]) thirdPlaceTeams.push(standings[2]);
+  }
+
+  return {
+    groups,
+    allGroupsComplete: groupLetters.every((group) => groups[group]?.isComplete),
+    thirdPlaceTeams: thirdPlaceTeams.sort(compareStandings),
+  };
+};
+
+const getThirdPlaceCandidates = (slotName) => slotName.match(/^3rd Group ([A-L](?:\/[A-L])*)$/)?.[1].split('/') ?? [];
+
+const assignThirdPlaceSlots = (groupData) => {
+  if (!groupData.allGroupsComplete) return {};
+
+  const assigned = {};
+  const usedGroups = new Set();
+  const thirdSlots = MATCHES.filter((match) => match.stage === 'Ronda de 32' && getThirdPlaceCandidates(match.away).length);
+
+  thirdSlots.forEach((match) => {
+    const candidates = getThirdPlaceCandidates(match.away);
+    const team = groupData.thirdPlaceTeams.find((standing) => candidates.includes(standing.group) && !usedGroups.has(standing.group));
+
+    if (team) {
+      assigned[match.id] = team.team;
+      usedGroups.add(team.group);
+    }
+  });
+
+  return assigned;
+};
+
+const getResolvedGroupTeam = (slotName, groupData) => {
+  const winnerGroup = slotName.match(/^Winner Group ([A-L])$/)?.[1];
+  if (winnerGroup) return groupData.groups[winnerGroup]?.isComplete ? groupData.groups[winnerGroup].standings[0]?.team : slotName;
+
+  const runnerUpGroup = slotName.match(/^Runner-up Group ([A-L])$/)?.[1];
+  if (runnerUpGroup) return groupData.groups[runnerUpGroup]?.isComplete ? groupData.groups[runnerUpGroup].standings[1]?.team : slotName;
+
+  return slotName;
+};
+
+const resolveKnockoutTeam = (slotName, results, groupData, thirdAssignments, currentMatchId, visited = new Set()) => {
+  const groupTeam = getResolvedGroupTeam(slotName, groupData);
+  if (groupTeam !== slotName) return groupTeam;
+
+  if (getThirdPlaceCandidates(slotName).length) return thirdAssignments[currentMatchId] ?? slotName;
+
+  const matchReference = slotName.match(/^(Winner|Loser) Match (\d+)$/);
+  if (!matchReference) return slotName;
+
+  const [, referenceType, referenceIdValue] = matchReference;
+  const referenceId = Number(referenceIdValue);
+  if (visited.has(referenceId)) return slotName;
+
+  const referenceMatch = MATCHES.find((match) => match.id === referenceId);
+  const referenceResult = results[referenceId];
+  if (!referenceMatch || !hasCompleteScore(referenceResult)) return slotName;
+
+  visited.add(referenceId);
+  const homeWins = Number(referenceResult.homeScore) > Number(referenceResult.awayScore);
+  const teamSlot =
+    (referenceType === 'Winner' && homeWins) || (referenceType === 'Loser' && !homeWins)
+      ? referenceMatch.home
+      : referenceMatch.away;
+
+  return resolveKnockoutTeam(teamSlot, results, groupData, thirdAssignments, referenceId, visited);
+};
+
+const resolveMatchTeams = (match, results, groupData, thirdAssignments) => ({
+  ...match,
+  home: resolveKnockoutTeam(match.home, results, groupData, thirdAssignments, match.id),
+  away: resolveKnockoutTeam(match.away, results, groupData, thirdAssignments, match.id),
+});
+
 const monthMap = {
   enero: '01',
   febrero: '02',
@@ -432,18 +587,25 @@ function App() {
       .sort((a, b) => b.points - a.points || b.picks - a.picks || a.name.localeCompare(b.name));
   }, [users, picks, results]);
 
+  const groupData = useMemo(() => buildGroupStandings(results), [results]);
+  const thirdAssignments = useMemo(() => assignThirdPlaceSlots(groupData), [groupData]);
+  const resolvedMatches = useMemo(
+    () => MATCHES.map((match) => resolveMatchTeams(match, results, groupData, thirdAssignments)),
+    [groupData, results, thirdAssignments],
+  );
+
   const stageOptions = useMemo(() => {
     const selectedGroup = matchGroups.find((group) => group.key === matchGroup) ?? matchGroups[0];
-    const stages = MATCHES.filter((match) => selectedGroup.orders.includes(getMatchUnlockOrder(match))).map(
+    const stages = resolvedMatches.filter((match) => selectedGroup.orders.includes(getMatchUnlockOrder(match))).map(
       (match) => match.stage,
     );
     return ['Todos', ...new Set(stages)];
-  }, [matchGroup]);
+  }, [matchGroup, resolvedMatches]);
 
   const visibleMatches = useMemo(() => {
     const selectedGroup = matchGroups.find((group) => group.key === matchGroup) ?? matchGroups[0];
     const term = query.trim().toLowerCase();
-    return MATCHES.filter((match) => {
+    return resolvedMatches.filter((match) => {
       const groupMatch = selectedGroup.orders.includes(getMatchUnlockOrder(match));
       const stageMatch = stage === 'Todos' || match.stage === stage;
       const queryMatch =
@@ -454,7 +616,7 @@ function App() {
           .includes(term);
       return groupMatch && stageMatch && queryMatch;
     });
-  }, [matchGroup, query, stage]);
+  }, [matchGroup, query, resolvedMatches, stage]);
 
   const loadAppData = async (activeSession = session) => {
     const normalizedSessionEmail = normalizeEmail(activeSession?.user?.email ?? '');
