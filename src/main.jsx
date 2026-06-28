@@ -367,20 +367,43 @@ const buildGroupStandings = (results) => {
 
 const getThirdPlaceCandidates = (slotName) => slotName.match(/^3rd Group ([A-L](?:\/[A-L])*)$/)?.[1].split('/') ?? [];
 
+const thirdPlaceMatchOverrides = {
+  74: 'Paraguay',
+  77: 'Sweden',
+  82: 'Senegal',
+  85: 'Algeria',
+};
+
 const assignThirdPlaceSlots = (groupData) => {
   if (!groupData.allGroupsComplete) return {};
 
   const thirdSlots = MATCHES.filter((match) => match.stage === 'Ronda de 32' && getThirdPlaceCandidates(match.away).length);
   const qualifiedThirds = groupData.thirdPlaceTeams.slice(0, thirdSlots.length);
+  const lockedAssignment = {};
+  const lockedGroups = new Set();
+
+  thirdSlots.forEach((slot) => {
+    const overrideTeam = thirdPlaceMatchOverrides[slot.id];
+    if (!overrideTeam) return;
+
+    const candidates = getThirdPlaceCandidates(slot.away);
+    const team = qualifiedThirds.find((standing) => standing.team === overrideTeam && candidates.includes(standing.group));
+    if (!team) return;
+
+    lockedAssignment[slot.id] = team.team;
+    lockedGroups.add(team.group);
+  });
+
+  const openSlots = thirdSlots.filter((slot) => !lockedAssignment[slot.id]);
   let bestAssignment = null;
 
   const search = (slotIndex, usedGroups, assignment) => {
-    if (slotIndex === thirdSlots.length) {
+    if (slotIndex === openSlots.length) {
       bestAssignment = assignment;
       return true;
     }
 
-    const slot = thirdSlots[slotIndex];
+    const slot = openSlots[slotIndex];
     const candidates = getThirdPlaceCandidates(slot.away);
 
     for (const team of qualifiedThirds) {
@@ -395,7 +418,7 @@ const assignThirdPlaceSlots = (groupData) => {
     return false;
   };
 
-  search(0, new Set(), {});
+  search(0, lockedGroups, lockedAssignment);
   return bestAssignment ?? {};
 };
 
