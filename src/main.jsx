@@ -133,13 +133,30 @@ const hasCompleteScore = (score) =>
   score?.homeScore !== undefined &&
   score?.awayScore !== undefined;
 
-const getPickPoints = (pick, result) => {
+const isKnockoutMatch = (match) => getMatchUnlockOrder(match) >= 4;
+
+const allowsAdvancingPick = (match, pick) => isKnockoutMatch(match) && pick?.outcome === 'draw';
+
+const needsAdvancingTeam = (match, score) => isKnockoutMatch(match) && getOutcome(score?.homeScore, score?.awayScore) === 'draw';
+
+const hasCompleteResult = (match, result) =>
+  hasCompleteScore(result) && (!needsAdvancingTeam(match, result) || Boolean(result?.advancingTeam));
+
+const getPickPoints = (pick, result, match) => {
   if (!pick?.outcome || !hasCompleteScore(result)) return null;
   const resultOutcome = getOutcome(result.homeScore, result.awayScore);
   const outcomePoints = pick.outcome === resultOutcome ? 1 : 0;
   const scorePoints =
     String(pick.homeScore) === String(result.homeScore) && String(pick.awayScore) === String(result.awayScore) ? 2 : 0;
-  return outcomePoints + scorePoints;
+  const advancingPoints =
+    match &&
+    needsAdvancingTeam(match, result) &&
+    pick.outcome === 'draw' &&
+    pick.advancingTeam &&
+    pick.advancingTeam === result.advancingTeam
+      ? 1
+      : 0;
+  return outcomePoints + scorePoints + advancingPoints;
 };
 
 const outcomeLabel = {
@@ -353,21 +370,33 @@ const getThirdPlaceCandidates = (slotName) => slotName.match(/^3rd Group ([A-L](
 const assignThirdPlaceSlots = (groupData) => {
   if (!groupData.allGroupsComplete) return {};
 
-  const assigned = {};
-  const usedGroups = new Set();
   const thirdSlots = MATCHES.filter((match) => match.stage === 'Ronda de 32' && getThirdPlaceCandidates(match.away).length);
+  const qualifiedThirds = groupData.thirdPlaceTeams.slice(0, thirdSlots.length);
+  let bestAssignment = null;
 
-  thirdSlots.forEach((match) => {
-    const candidates = getThirdPlaceCandidates(match.away);
-    const team = groupData.thirdPlaceTeams.find((standing) => candidates.includes(standing.group) && !usedGroups.has(standing.group));
-
-    if (team) {
-      assigned[match.id] = team.team;
-      usedGroups.add(team.group);
+  const search = (slotIndex, usedGroups, assignment) => {
+    if (slotIndex === thirdSlots.length) {
+      bestAssignment = assignment;
+      return true;
     }
-  });
 
-  return assigned;
+    const slot = thirdSlots[slotIndex];
+    const candidates = getThirdPlaceCandidates(slot.away);
+
+    for (const team of qualifiedThirds) {
+      if (usedGroups.has(team.group) || !candidates.includes(team.group)) continue;
+
+      const nextUsedGroups = new Set(usedGroups);
+      nextUsedGroups.add(team.group);
+
+      if (search(slotIndex + 1, nextUsedGroups, { ...assignment, [slot.id]: team.team })) return true;
+    }
+
+    return false;
+  };
+
+  search(0, new Set(), {});
+  return bestAssignment ?? {};
 };
 
 const getResolvedGroupTeam = (slotName, groupData) => {
@@ -398,7 +427,17 @@ const resolveKnockoutTeam = (slotName, results, groupData, thirdAssignments, cur
   if (!referenceMatch || !hasCompleteScore(referenceResult)) return slotName;
 
   visited.add(referenceId);
-  const homeWins = Number(referenceResult.homeScore) > Number(referenceResult.awayScore);
+  const resolvedHome = resolveKnockoutTeam(referenceMatch.home, results, groupData, thirdAssignments, referenceId, new Set(visited));
+  const resolvedAway = resolveKnockoutTeam(referenceMatch.away, results, groupData, thirdAssignments, referenceId, new Set(visited));
+  const referenceOutcome = getOutcome(referenceResult.homeScore, referenceResult.awayScore);
+
+  if (referenceOutcome === 'draw') {
+    if (!referenceResult.advancingTeam) return slotName;
+    const loser = referenceResult.advancingTeam === resolvedHome ? resolvedAway : resolvedHome;
+    return referenceType === 'Winner' ? referenceResult.advancingTeam : loser;
+  }
+
+  const homeWins = referenceOutcome === 'home';
   const teamSlot =
     (referenceType === 'Winner' && homeWins) || (referenceType === 'Loser' && !homeWins)
       ? referenceMatch.home
@@ -574,7 +613,7 @@ function App() {
         const total = MATCHES.reduce((sum, match) => {
           const pick = userPicks[match.id];
           const result = results[match.id];
-          return sum + (getPickPoints(pick, result) ?? 0);
+          return sum + (getPickPoints(pick, result, match) ?? 0);
         }, 0);
 
         return {
@@ -624,14 +663,22 @@ function App() {
     const adminQuery = normalizedSessionEmail
       ? supabase.from('admin_users').select('email').ilike('email', normalizedSessionEmail).maybeSingle()
       : Promise.resolve({ data: null });
-    const [profilesResult, picksResult, bonusResult, resultsResult, settingsResult, adminResult] = await Promise.all([
+    let [profilesResult, picksResult, bonusResult, resultsResult, settingsResult, adminResult] = await Promise.all([
       supabase.from('profiles').select('id,email,name').order('name'),
-      supabase.from('picks').select('user_id,match_id,outcome,home_score,away_score'),
+      supabase.from('picks').select('user_id,match_id,outcome,home_score,away_score,advancing_team'),
       supabase.from('bonus_picks').select('user_id,world_champion,top_scorer,best_goalkeeper'),
-      supabase.from('results').select('match_id,home_score,away_score'),
+      supabase.from('results').select('match_id,home_score,away_score,advancing_team'),
       supabase.from('app_settings').select('key,value').eq('key', 'unlocked_phase').limit(1),
       adminQuery,
     ]);
+
+    if (picksResult.error?.message?.includes('advancing_team')) {
+      picksResult = await supabase.from('picks').select('user_id,match_id,outcome,home_score,away_score');
+    }
+
+    if (resultsResult.error?.message?.includes('advancing_team')) {
+      resultsResult = await supabase.from('results').select('match_id,home_score,away_score');
+    }
 
     const queryResults = {
       profiles: profilesResult,
@@ -660,6 +707,7 @@ function App() {
         outcome: row.outcome,
         homeScore: row.home_score ?? '',
         awayScore: row.away_score ?? '',
+        advancingTeam: row.advancing_team ?? '',
       };
     }
 
@@ -679,6 +727,7 @@ function App() {
       nextResults[row.match_id] = {
         homeScore: row.home_score ?? '',
         awayScore: row.away_score ?? '',
+        advancingTeam: row.advancing_team ?? '',
       };
     }
 
@@ -830,6 +879,9 @@ function App() {
       const outcome = getOutcome(nextPick.homeScore, nextPick.awayScore);
       if (outcome) nextPick.outcome = outcome;
     }
+    if (!allowsAdvancingPick(match, nextPick)) {
+      nextPick.advancingTeam = '';
+    }
     const nextPicks = {
       ...picks,
       [currentUser.id]: {
@@ -845,6 +897,7 @@ function App() {
       outcome: nextPick.outcome,
       home_score: nextPick.homeScore === '' || nextPick.homeScore === undefined ? null : Number(nextPick.homeScore),
       away_score: nextPick.awayScore === '' || nextPick.awayScore === undefined ? null : Number(nextPick.awayScore),
+      advancing_team: nextPick.advancingTeam || null,
       updated_at: new Date().toISOString(),
     });
   };
@@ -900,11 +953,17 @@ function App() {
   const updateResult = async (matchId, patch) => {
     if (!isAdmin) return;
     const match = MATCHES.find((item) => item.id === matchId);
-    if (!match || hasMatchStarted(match, now) || hasCompleteScore(results[matchId])) return;
+    if (!match) return;
+    const canSetAdvancingTeam =
+      'advancingTeam' in patch && hasCompleteScore(results[matchId]) && needsAdvancingTeam(match, results[matchId]);
+    if ((hasMatchStarted(match, now) && !canSetAdvancingTeam) || hasCompleteResult(match, results[matchId])) return;
     const nextResult = {
       ...(results[matchId] ?? {}),
       ...patch,
     };
+    if (!needsAdvancingTeam(match, nextResult)) {
+      nextResult.advancingTeam = '';
+    }
     setResults({
       ...results,
       [matchId]: nextResult,
@@ -914,6 +973,7 @@ function App() {
       match_id: matchId,
       home_score: nextResult.homeScore === '' || nextResult.homeScore === undefined ? null : Number(nextResult.homeScore),
       away_score: nextResult.awayScore === '' || nextResult.awayScore === undefined ? null : Number(nextResult.awayScore),
+      advancing_team: nextResult.advancingTeam || null,
       updated_at: new Date().toISOString(),
     });
   };
@@ -927,7 +987,7 @@ function App() {
   const currentPhase =
     unlockPhases.find((phase) => phase.order === effectiveUnlockedOrder)?.label ?? 'Jornada 1 grupos';
   const finishedWithoutResult = MATCHES.filter(
-    (match) => hasMatchEnded(match, now) && !hasCompleteScore(results[match.id]),
+    (match) => hasMatchEnded(match, now) && !hasCompleteResult(match, results[match.id]),
   );
 
   if (isLoading) {
@@ -1492,8 +1552,28 @@ function ScoreInputs({ value, onChange, disabled = false }) {
   );
 }
 
+function AdvancingTeamPicker({ match, value, onChange, disabled = false, label = 'Avanza por desempate' }) {
+  return (
+    <div className="advance-picker">
+      <span>{label}</span>
+      {[match.home, match.away].map((team) => (
+        <label key={team} className="advance-option">
+          <input
+            type="checkbox"
+            checked={value === team}
+            disabled={disabled}
+            onChange={() => onChange({ advancingTeam: value === team ? '' : team })}
+          />
+          {team}
+        </label>
+      ))}
+    </div>
+  );
+}
+
 function PredictionCard({ match, pick, result, locked, lockReason, onChange }) {
-  const points = getPickPoints(pick, result);
+  const points = getPickPoints(pick, result, match);
+  const showAdvancingPick = allowsAdvancingPick(match, pick);
 
   return (
     <article className={`match-card ${locked ? 'locked-card' : ''}`}>
@@ -1525,16 +1605,19 @@ function PredictionCard({ match, pick, result, locked, lockReason, onChange }) {
         <ScoreInputs value={pick} onChange={onChange} disabled={locked} />
         <div className="points-pill">{points === null ? 'Pendiente' : `${points} pts`}</div>
       </div>
+      {showAdvancingPick && (
+        <AdvancingTeamPicker match={match} value={pick.advancingTeam ?? ''} onChange={onChange} disabled={locked} />
+      )}
     </article>
   );
 }
 
 function AllPicksCard({ match, users, picks, result, revealed }) {
-  const hasResult = hasCompleteScore(result);
+  const hasResult = hasCompleteResult(match, result);
   const sortedUsers = [...users].sort((a, b) => {
     if (!hasResult) return a.name.localeCompare(b.name);
-    const pointsA = getPickPoints(picks[a.id]?.[match.id], result) ?? -1;
-    const pointsB = getPickPoints(picks[b.id]?.[match.id], result) ?? -1;
+    const pointsA = getPickPoints(picks[a.id]?.[match.id], result, match) ?? -1;
+    const pointsB = getPickPoints(picks[b.id]?.[match.id], result, match) ?? -1;
     return pointsB - pointsA || a.name.localeCompare(b.name);
   });
 
@@ -1557,7 +1640,9 @@ function AllPicksCard({ match, users, picks, result, revealed }) {
           <strong>Resultado</strong>
           <span>
             {hasResult
-              ? `${result.homeScore} - ${result.awayScore} | ${outcomeLabel[getOutcome(result.homeScore, result.awayScore)]}`
+              ? `${result.homeScore} - ${result.awayScore} | ${outcomeLabel[getOutcome(result.homeScore, result.awayScore)]}${
+                  result.advancingTeam ? ` | Avanza ${result.advancingTeam}` : ''
+                }`
               : 'Marcador pendiente'}
           </span>
         </div>
@@ -1568,7 +1653,7 @@ function AllPicksCard({ match, users, picks, result, revealed }) {
             <div className="hidden-picks">No hay participantes cargados.</div>
           ) : sortedUsers.map((user) => {
             const pick = picks[user.id]?.[match.id];
-            const pickPoints = getPickPoints(pick, result);
+            const pickPoints = getPickPoints(pick, result, match);
 
             return (
               <div className="all-pick-row" key={user.email}>
@@ -1578,6 +1663,7 @@ function AllPicksCard({ match, users, picks, result, revealed }) {
                     <div className="all-pick-prediction">
                       <span>{outcomeLabel[pick.outcome] ?? '-'}</span>
                       <b>{pick.homeScore ?? '-'} - {pick.awayScore ?? '-'}</b>
+                      {pick.advancingTeam && <small>Avanza {pick.advancingTeam}</small>}
                     </div>
                     <span className={`match-points ${pickPoints ? 'earned' : ''}`}>
                       {pickPoints === null ? 'Pendiente' : `${pickPoints} pts`}
@@ -1605,8 +1691,9 @@ function AllPicksCard({ match, users, picks, result, revealed }) {
 
 function ResultCard({ match, result, started, ended, onChange }) {
   const outcome = getOutcome(result.homeScore, result.awayScore);
-  const hasResult = hasCompleteScore(result);
-  const resultLocked = started || hasResult;
+  const hasResult = hasCompleteResult(match, result);
+  const showAdvancingPick = needsAdvancingTeam(match, result);
+  const resultLocked = hasResult || (started && !showAdvancingPick);
   const statusLabel = hasResult
     ? 'Resultado cerrado'
     : ended
@@ -1628,8 +1715,19 @@ function ResultCard({ match, result, started, ended, onChange }) {
       </div>
       <div className="prediction-footer">
         <ScoreInputs value={result} onChange={onChange} disabled={resultLocked} />
-        <div className="points-pill">{outcome ? outcomeLabel[outcome] : 'Sin resultado'}</div>
+        <div className="points-pill">
+          {outcome ? `${outcomeLabel[outcome]}${result.advancingTeam ? ` | Avanza ${result.advancingTeam}` : ''}` : 'Sin resultado'}
+        </div>
       </div>
+      {showAdvancingPick && (
+        <AdvancingTeamPicker
+          match={match}
+          value={result.advancingTeam ?? ''}
+          onChange={onChange}
+          disabled={resultLocked}
+          label="Equipo que avanzo"
+        />
+      )}
     </article>
   );
 }

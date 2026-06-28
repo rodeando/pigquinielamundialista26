@@ -559,6 +559,35 @@ select {
   font-weight: 900;
 }
 
+.advance-picker {
+  display: grid;
+  gap: 8px;
+  border-radius: 8px;
+  background: #edf0eb;
+  padding: 10px;
+}
+
+.advance-picker > span {
+  color: #59645f;
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.advance-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #17201d;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.advance-option input {
+  width: 18px;
+  min-height: 18px;
+  accent-color: #1f7a6f;
+}
+
 .points-pill {
   min-width: 88px;
   border-radius: 999px;
@@ -647,6 +676,11 @@ select {
 .all-pick-prediction b {
   color: #1f7a6f;
   white-space: nowrap;
+}
+
+.all-pick-prediction small {
+  color: #9a6d20;
+  font-weight: 900;
 }
 
 .match-points {
