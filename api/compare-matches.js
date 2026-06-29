@@ -33,6 +33,10 @@ const teamAliases = {
   'türkiye': 'turkiye',
 };
 
+const footballDataMatchOverrides = {
+  537417: { matchId: 73, method: 'football-data-id' },
+};
+
 const normalizeTeam = (value) => {
   const normalized = String(value ?? '')
     .normalize('NFD')
@@ -84,6 +88,12 @@ const loadLocalMatches = () => {
 };
 
 const findLocalMatch = (localMatches, apiMatch) => {
+  const override = footballDataMatchOverrides[apiMatch.id];
+  if (override) {
+    const match = localMatches.find((item) => item.id === override.matchId);
+    if (match) return { match, method: override.method };
+  }
+
   const dateKey = apiDateKey(apiMatch.utcDate);
   const home = normalizeTeam(apiMatch.homeTeam?.name);
   const away = normalizeTeam(apiMatch.awayTeam?.name);
