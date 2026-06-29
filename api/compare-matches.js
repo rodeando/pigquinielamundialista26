@@ -35,6 +35,7 @@ const teamAliases = {
 
 const footballDataMatchOverrides = {
   537417: { matchId: 73, method: 'football-data-id' },
+  537423: { matchId: 76, method: 'football-data-id' },
 };
 
 const normalizeTeam = (value) => {
