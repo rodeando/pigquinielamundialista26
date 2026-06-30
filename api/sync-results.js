@@ -355,9 +355,26 @@ const findLocalMatch = (localMatches, apiMatch) => {
 };
 
 const getFinalScore = (apiMatch) => {
-  const score = apiMatch.score?.fullTime ?? apiMatch.score?.regularTime;
+  const score = apiMatch.score?.regularTime ?? apiMatch.score?.fullTime;
   if (!Number.isFinite(score?.home) || !Number.isFinite(score?.away)) return null;
   return score;
+};
+
+const getAdvancingTeam = (apiMatch, mapped) => {
+  const score = getFinalScore(apiMatch);
+  if (!score || getOutcome(score.home, score.away) !== 'draw') return null;
+
+  const winner = apiMatch.score?.winner;
+  if (winner === 'HOME_TEAM') return mapped.shouldSwapScore ? mapped.match.away : mapped.match.home;
+  if (winner === 'AWAY_TEAM') return mapped.shouldSwapScore ? mapped.match.home : mapped.match.away;
+
+  const fullTime = apiMatch.score?.fullTime;
+  if (Number.isFinite(fullTime?.home) && Number.isFinite(fullTime?.away) && fullTime.home !== fullTime.away) {
+    const apiHomeAdvanced = fullTime.home > fullTime.away;
+    return apiHomeAdvanced === !mapped.shouldSwapScore ? mapped.match.home : mapped.match.away;
+  }
+
+  return null;
 };
 
 const isAuthorized = (request) => {
@@ -471,6 +488,7 @@ module.exports = async function handler(request, response) {
       match_id: mapped.match.id,
       home_score: mapped.shouldSwapScore ? score.away : score.home,
       away_score: mapped.shouldSwapScore ? score.home : score.away,
+      advancing_team: getAdvancingTeam(apiMatch, mapped),
       updated_at: new Date().toISOString(),
     });
   }
