@@ -78,6 +78,15 @@ const writeStorage = (key, value) => localStorage.setItem(key, JSON.stringify(va
 
 const normalizeEmail = (email) => email.trim().toLowerCase();
 
+const normalizeTeamName = (value) =>
+  String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
 const getSessionProfile = (activeSession) => {
   const email = normalizeEmail(activeSession?.user?.email ?? '');
   if (!activeSession?.user?.id || !email) return null;
@@ -153,7 +162,7 @@ const getPickPoints = (pick, result, match) => {
     needsAdvancingTeam(match, result) &&
     pick.outcome === 'draw' &&
     pick.advancingTeam &&
-    pick.advancingTeam === result.advancingTeam
+    normalizeTeamName(pick.advancingTeam) === normalizeTeamName(result.advancingTeam)
       ? 1
       : 0;
   return outcomePoints + scorePoints + advancingPoints;
@@ -456,7 +465,7 @@ const resolveKnockoutTeam = (slotName, results, groupData, thirdAssignments, cur
 
   if (referenceOutcome === 'draw') {
     if (!referenceResult.advancingTeam) return slotName;
-    const loser = referenceResult.advancingTeam === resolvedHome ? resolvedAway : resolvedHome;
+    const loser = normalizeTeamName(referenceResult.advancingTeam) === normalizeTeamName(resolvedHome) ? resolvedAway : resolvedHome;
     return referenceType === 'Winner' ? referenceResult.advancingTeam : loser;
   }
 
