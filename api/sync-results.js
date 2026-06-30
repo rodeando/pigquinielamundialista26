@@ -39,6 +39,15 @@ const footballDataMatchOverrides = {
   537423: { matchId: 76, shouldSwapScore: false },
 };
 
+const groupLetters = 'ABCDEFGHIJKL'.split('');
+
+const thirdPlaceMatchOverrides = {
+  74: 'Paraguay',
+  77: 'Sweden',
+  82: 'Senegal',
+  85: 'Algeria',
+};
+
 const normalizeTeam = (value) => {
   const normalized = String(value ?? '')
     .normalize('NFD')
@@ -95,6 +104,231 @@ const normalizeLocalMatch = (match) => ({
   normalizedHome: normalizeTeam(match.home),
   normalizedAway: normalizeTeam(match.away),
 });
+
+const hasCompleteScore = (score) =>
+  score?.homeScore !== '' &&
+  score?.awayScore !== '' &&
+  score?.homeScore !== undefined &&
+  score?.awayScore !== undefined &&
+  score?.homeScore !== null &&
+  score?.awayScore !== null;
+
+const getOutcome = (home, away) => {
+  const homeScore = Number(home);
+  const awayScore = Number(away);
+  if (!Number.isFinite(homeScore) || !Number.isFinite(awayScore)) return '';
+  if (homeScore > awayScore) return 'home';
+  if (homeScore < awayScore) return 'away';
+  return 'draw';
+};
+
+const makeTeamStats = (team, group) => ({
+  team,
+  group,
+  played: 0,
+  wins: 0,
+  losses: 0,
+  draws: 0,
+  goalsFor: 0,
+  goalsAgainst: 0,
+  goalDifference: 0,
+  points: 0,
+});
+
+const compareStandings = (a, b) =>
+  b.points - a.points ||
+  b.goalDifference - a.goalDifference ||
+  b.goalsFor - a.goalsFor ||
+  b.wins - a.wins ||
+  a.team.localeCompare(b.team);
+
+const getTeamStats = (teams, team, group) => {
+  if (!teams.has(team)) teams.set(team, makeTeamStats(team, group));
+  return teams.get(team);
+};
+
+const applyGroupResult = (homeStats, awayStats, result) => {
+  const homeScore = Number(result.homeScore);
+  const awayScore = Number(result.awayScore);
+
+  homeStats.played += 1;
+  awayStats.played += 1;
+  homeStats.goalsFor += homeScore;
+  homeStats.goalsAgainst += awayScore;
+  awayStats.goalsFor += awayScore;
+  awayStats.goalsAgainst += homeScore;
+  homeStats.goalDifference = homeStats.goalsFor - homeStats.goalsAgainst;
+  awayStats.goalDifference = awayStats.goalsFor - awayStats.goalsAgainst;
+
+  if (homeScore > awayScore) {
+    homeStats.wins += 1;
+    awayStats.losses += 1;
+    homeStats.points += 3;
+  } else if (awayScore > homeScore) {
+    awayStats.wins += 1;
+    homeStats.losses += 1;
+    awayStats.points += 3;
+  } else {
+    homeStats.draws += 1;
+    awayStats.draws += 1;
+    homeStats.points += 1;
+    awayStats.points += 1;
+  }
+};
+
+const mapResultRows = (rows) =>
+  Object.fromEntries(
+    rows.map((row) => [
+      row.match_id,
+      {
+        homeScore: row.home_score,
+        awayScore: row.away_score,
+        advancingTeam: row.advancing_team ?? '',
+      },
+    ]),
+  );
+
+const buildGroupStandings = (matches, results) => {
+  const groups = {};
+  const thirdPlaceTeams = [];
+
+  for (const group of groupLetters) {
+    const groupMatches = matches.filter((match) => match.group === group);
+    const teams = new Map();
+    let completedMatches = 0;
+
+    groupMatches.forEach((match) => {
+      const homeStats = getTeamStats(teams, match.home, group);
+      const awayStats = getTeamStats(teams, match.away, group);
+      const result = results[match.id];
+      if (!hasCompleteScore(result)) return;
+
+      completedMatches += 1;
+      applyGroupResult(homeStats, awayStats, result);
+    });
+
+    const standings = [...teams.values()].sort(compareStandings);
+    const isComplete = groupMatches.length > 0 && completedMatches === groupMatches.length;
+    groups[group] = { group, standings, isComplete };
+
+    if (isComplete && standings[2]) thirdPlaceTeams.push(standings[2]);
+  }
+
+  return {
+    groups,
+    allGroupsComplete: groupLetters.every((group) => groups[group]?.isComplete),
+    thirdPlaceTeams: thirdPlaceTeams.sort(compareStandings),
+  };
+};
+
+const getThirdPlaceCandidates = (slotName) => slotName.match(/^3rd Group ([A-L](?:\/[A-L])*)$/)?.[1].split('/') ?? [];
+
+const assignThirdPlaceSlots = (matches, groupData) => {
+  if (!groupData.allGroupsComplete) return {};
+
+  const thirdSlots = matches.filter((match) => match.stage === 'Ronda de 32' && getThirdPlaceCandidates(match.away).length);
+  const qualifiedThirds = groupData.thirdPlaceTeams.slice(0, thirdSlots.length);
+  const lockedAssignment = {};
+  const lockedGroups = new Set();
+
+  thirdSlots.forEach((slot) => {
+    const overrideTeam = thirdPlaceMatchOverrides[slot.id];
+    if (!overrideTeam) return;
+
+    const candidates = getThirdPlaceCandidates(slot.away);
+    const team = qualifiedThirds.find((standing) => standing.team === overrideTeam && candidates.includes(standing.group));
+    if (!team) return;
+
+    lockedAssignment[slot.id] = team.team;
+    lockedGroups.add(team.group);
+  });
+
+  const openSlots = thirdSlots.filter((slot) => !lockedAssignment[slot.id]);
+  let bestAssignment = null;
+
+  const search = (slotIndex, usedGroups, assignment) => {
+    if (slotIndex === openSlots.length) {
+      bestAssignment = assignment;
+      return true;
+    }
+
+    const slot = openSlots[slotIndex];
+    const candidates = getThirdPlaceCandidates(slot.away);
+
+    for (const team of qualifiedThirds) {
+      if (usedGroups.has(team.group) || !candidates.includes(team.group)) continue;
+
+      const nextUsedGroups = new Set(usedGroups);
+      nextUsedGroups.add(team.group);
+      if (search(slotIndex + 1, nextUsedGroups, { ...assignment, [slot.id]: team.team })) return true;
+    }
+
+    return false;
+  };
+
+  search(0, lockedGroups, lockedAssignment);
+  return bestAssignment ?? {};
+};
+
+const getResolvedGroupTeam = (slotName, groupData) => {
+  const winnerGroup = slotName.match(/^Winner Group ([A-L])$/)?.[1];
+  if (winnerGroup) return groupData.groups[winnerGroup]?.isComplete ? groupData.groups[winnerGroup].standings[0]?.team : slotName;
+
+  const runnerUpGroup = slotName.match(/^Runner-up Group ([A-L])$/)?.[1];
+  if (runnerUpGroup) return groupData.groups[runnerUpGroup]?.isComplete ? groupData.groups[runnerUpGroup].standings[1]?.team : slotName;
+
+  return slotName;
+};
+
+const resolveKnockoutTeam = (slotName, matches, results, groupData, thirdAssignments, currentMatchId, visited = new Set()) => {
+  const groupTeam = getResolvedGroupTeam(slotName, groupData);
+  if (groupTeam !== slotName) return groupTeam;
+
+  if (getThirdPlaceCandidates(slotName).length) return thirdAssignments[currentMatchId] ?? slotName;
+
+  const matchReference = slotName.match(/^(Winner|Loser) Match (\d+)$/);
+  if (!matchReference) return slotName;
+
+  const [, referenceType, referenceIdValue] = matchReference;
+  const referenceId = Number(referenceIdValue);
+  if (visited.has(referenceId)) return slotName;
+
+  const referenceMatch = matches.find((match) => match.id === referenceId);
+  const referenceResult = results[referenceId];
+  if (!referenceMatch || !hasCompleteScore(referenceResult)) return slotName;
+
+  visited.add(referenceId);
+  const resolvedHome = resolveKnockoutTeam(referenceMatch.home, matches, results, groupData, thirdAssignments, referenceId, new Set(visited));
+  const resolvedAway = resolveKnockoutTeam(referenceMatch.away, matches, results, groupData, thirdAssignments, referenceId, new Set(visited));
+  const referenceOutcome = getOutcome(referenceResult.homeScore, referenceResult.awayScore);
+
+  if (referenceOutcome === 'draw') {
+    if (!referenceResult.advancingTeam) return slotName;
+    const loser = referenceResult.advancingTeam === resolvedHome ? resolvedAway : resolvedHome;
+    return referenceType === 'Winner' ? referenceResult.advancingTeam : loser;
+  }
+
+  const homeWins = referenceOutcome === 'home';
+  const teamSlot =
+    (referenceType === 'Winner' && homeWins) || (referenceType === 'Loser' && !homeWins)
+      ? referenceMatch.home
+      : referenceMatch.away;
+
+  return resolveKnockoutTeam(teamSlot, matches, results, groupData, thirdAssignments, referenceId, visited);
+};
+
+const resolveLocalMatches = (matches, results) => {
+  const groupData = buildGroupStandings(matches, results);
+  const thirdAssignments = assignThirdPlaceSlots(matches, groupData);
+
+  return matches.map((match) =>
+    normalizeLocalMatch({
+      ...match,
+      home: resolveKnockoutTeam(match.home, matches, results, groupData, thirdAssignments, match.id),
+      away: resolveKnockoutTeam(match.away, matches, results, groupData, thirdAssignments, match.id),
+    }),
+  );
+};
 
 const findLocalMatch = (localMatches, apiMatch) => {
   const override = footballDataMatchOverrides[apiMatch.id];
@@ -201,7 +435,20 @@ module.exports = async function handler(request, response) {
   }
 
   const payload = await footballResponse.json();
-  const localMatches = loadLocalMatches();
+  let { data: resultRows, error: resultsError } = await supabase
+    .from('results')
+    .select('match_id,home_score,away_score,advancing_team');
+
+  if (resultsError?.message?.includes('advancing_team')) {
+    ({ data: resultRows, error: resultsError } = await supabase.from('results').select('match_id,home_score,away_score'));
+  }
+
+  if (resultsError) {
+    response.status(500).json({ error: resultsError.message });
+    return;
+  }
+
+  const localMatches = resolveLocalMatches(loadLocalMatches(), mapResultRows(resultRows ?? []));
   const rows = [];
   const unmatched = [];
 
