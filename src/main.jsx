@@ -159,9 +159,10 @@ const getPickPoints = (pick, result, match) => {
     String(pick.homeScore) === String(result.homeScore) && String(pick.awayScore) === String(result.awayScore) ? 2 : 0;
   const advancingPoints =
     match &&
-    needsAdvancingTeam(match, result) &&
+    isKnockoutMatch(match) &&
     pick.outcome === 'draw' &&
     pick.advancingTeam &&
+    result.advancingTeam &&
     normalizeTeamName(pick.advancingTeam) === normalizeTeamName(result.advancingTeam)
       ? 1
       : 0;
