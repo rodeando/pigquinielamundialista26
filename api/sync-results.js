@@ -346,7 +346,7 @@ const findLocalMatch = (localMatches, apiMatch) => {
   const override = footballDataMatchOverrides[apiMatch.id];
   if (override) {
     const match = localMatches.find((item) => item.id === override.matchId);
-    if (match) return { match, shouldSwapScore: override.shouldSwapScore };
+    if (match) return { match, shouldSwapScore: override.shouldSwapScore, method: 'football-data-id' };
   }
 
   const dateKey = apiDateKey(apiMatch.utcDate);
@@ -358,17 +358,17 @@ const findLocalMatch = (localMatches, apiMatch) => {
     (match) => match.dateKey === dateKey && match.normalizedHome === home && match.normalizedAway === away,
   );
 
-  if (exact) return { match: exact, shouldSwapScore: false };
+  if (exact) return { match: exact, shouldSwapScore: false, method: 'exact' };
 
   const reversed = localMatches.find(
     (match) => match.dateKey === dateKey && match.normalizedHome === away && match.normalizedAway === home,
   );
 
-  if (reversed) return { match: reversed, shouldSwapScore: true };
+  if (reversed) return { match: reversed, shouldSwapScore: true, method: 'reversed' };
 
   const timeFallback = localMatches.find((match) => match.dateKey === dateKey && match.timeKey === timeKey && match.id >= 73);
 
-  return timeFallback ? { match: timeFallback, shouldSwapScore: false } : null;
+  return timeFallback ? { match: timeFallback, shouldSwapScore: false, method: 'time-fallback' } : null;
 };
 
 const getFinalScore = (apiMatch) => {
@@ -484,6 +484,7 @@ module.exports = async function handler(request, response) {
 
   const localMatches = resolveLocalMatches(loadLocalMatches(), mapResultRows(resultRows ?? []));
   const rows = [];
+  const mappedRows = [];
   const unmatched = [];
 
   for (const apiMatch of payload.matches ?? []) {
@@ -501,12 +502,32 @@ module.exports = async function handler(request, response) {
       continue;
     }
 
-    rows.push({
+    const row = {
       match_id: mapped.match.id,
       home_score: mapped.shouldSwapScore ? score.away : score.home,
       away_score: mapped.shouldSwapScore ? score.home : score.away,
       advancing_team: getAdvancingTeam(apiMatch, mapped),
       updated_at: new Date().toISOString(),
+    };
+
+    rows.push(row);
+    mappedRows.push({
+      footballDataId: apiMatch.id,
+      utcDate: apiMatch.utcDate,
+      apiHome: apiMatch.homeTeam?.name,
+      apiAway: apiMatch.awayTeam?.name,
+      matchId: mapped.match.id,
+      localHome: mapped.match.home,
+      localAway: mapped.match.away,
+      localDate: mapped.match.date,
+      localTime: mapped.match.time,
+      method: mapped.method,
+      row: {
+        match_id: row.match_id,
+        home_score: row.home_score,
+        away_score: row.away_score,
+        advancing_team: row.advancing_team,
+      },
     });
   }
 
@@ -514,13 +535,18 @@ module.exports = async function handler(request, response) {
     response.status(200).json({
       ok: true,
       updated: 0,
+      footballDataMatches: payload.matches?.length ?? 0,
+      mapped: mappedRows,
       unmatched,
       message: 'No finished World Cup matches with mapped final scores were found.',
     });
     return;
   }
 
-  const { error } = await supabase.from('results').upsert(rows, { onConflict: 'match_id' });
+  const { data: savedRows, error } = await supabase
+    .from('results')
+    .upsert(rows, { onConflict: 'match_id' })
+    .select('match_id,home_score,away_score,advancing_team,updated_at');
 
   if (error) {
     response.status(500).json({ error: error.message });
@@ -530,7 +556,10 @@ module.exports = async function handler(request, response) {
   response.status(200).json({
     ok: true,
     updated: rows.length,
+    footballDataMatches: payload.matches?.length ?? 0,
     matchIds: rows.map((row) => row.match_id),
+    mapped: mappedRows,
+    savedRows,
     unmatched,
   });
 };
