@@ -1002,13 +1002,24 @@ function App() {
       [matchId]: nextResult,
     });
 
-    await supabase.from('results').upsert({
+    const { error } = await supabase.from('results').upsert({
       match_id: matchId,
       home_score: nextResult.homeScore === '' || nextResult.homeScore === undefined ? null : Number(nextResult.homeScore),
       away_score: nextResult.awayScore === '' || nextResult.awayScore === undefined ? null : Number(nextResult.awayScore),
       advancing_team: nextResult.advancingTeam || null,
       updated_at: new Date().toISOString(),
     });
+
+    if (error) {
+      logSupabaseError('results', error);
+      setDataErrors((currentErrors) => [
+        ...currentErrors.filter((message) => !message.startsWith('results:')),
+        `results: ${error.message}`,
+      ]);
+      return;
+    }
+
+    setDataErrors((currentErrors) => currentErrors.filter((message) => !message.startsWith('results:')));
   };
 
   const effectiveUnlockedOrder = getEffectiveUnlockedOrder(unlockedOrder, now);

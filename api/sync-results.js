@@ -76,6 +76,17 @@ const apiDateKey = (utcDate) => {
   return `${values.year}-${values.month}-${values.day}`;
 };
 
+const apiTimeKey = (utcDate) => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: APP_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(utcDate));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.hour}:${values.minute}`;
+};
+
 const loadLocalMatches = () => {
   const sourcePath = path.join(process.cwd(), 'src', 'matches.js');
   try {
@@ -101,6 +112,7 @@ const loadLocalMatches = () => {
 const normalizeLocalMatch = (match) => ({
   ...match,
   dateKey: localDateKey(match.date),
+  timeKey: match.time,
   normalizedHome: normalizeTeam(match.home),
   normalizedAway: normalizeTeam(match.away),
 });
@@ -338,6 +350,7 @@ const findLocalMatch = (localMatches, apiMatch) => {
   }
 
   const dateKey = apiDateKey(apiMatch.utcDate);
+  const timeKey = apiTimeKey(apiMatch.utcDate);
   const home = normalizeTeam(apiMatch.homeTeam?.name);
   const away = normalizeTeam(apiMatch.awayTeam?.name);
 
@@ -351,7 +364,11 @@ const findLocalMatch = (localMatches, apiMatch) => {
     (match) => match.dateKey === dateKey && match.normalizedHome === away && match.normalizedAway === home,
   );
 
-  return reversed ? { match: reversed, shouldSwapScore: true } : null;
+  if (reversed) return { match: reversed, shouldSwapScore: true };
+
+  const timeFallback = localMatches.find((match) => match.dateKey === dateKey && match.timeKey === timeKey && match.id >= 73);
+
+  return timeFallback ? { match: timeFallback, shouldSwapScore: false } : null;
 };
 
 const getFinalScore = (apiMatch) => {
