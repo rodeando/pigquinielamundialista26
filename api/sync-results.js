@@ -487,6 +487,7 @@ module.exports = async function handler(request, response) {
   const mappedRows = [];
   const unmatched = [];
   const skippedNoScore = [];
+  const wantsDebug = ['1', 'true', 'yes'].includes(String(request.query?.debug ?? '').toLowerCase());
 
   for (const apiMatch of payload.matches ?? []) {
     const score = getFinalScore(apiMatch);
@@ -543,15 +544,20 @@ module.exports = async function handler(request, response) {
   }
 
   if (!rows.length) {
-    response.status(200).json({
+    const compactResponse = {
       ok: true,
       updated: 0,
       footballDataMatches: payload.matches?.length ?? 0,
-      mapped: mappedRows,
-      skippedNoScore,
-      unmatched,
+      matchIds: [],
+      skippedNoScoreIds: skippedNoScore.map((match) => match.footballDataId),
+      unmatchedIds: unmatched.map((match) => match.footballDataId),
       message: 'No finished World Cup matches with mapped final scores were found.',
-    });
+    };
+    response.status(200).json(
+      wantsDebug
+        ? { ...compactResponse, mapped: mappedRows, skippedNoScore, unmatched }
+        : compactResponse,
+    );
     return;
   }
 
@@ -565,14 +571,19 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  response.status(200).json({
+  const compactResponse = {
     ok: true,
     updated: rows.length,
     footballDataMatches: payload.matches?.length ?? 0,
     matchIds: rows.map((row) => row.match_id),
-    mapped: mappedRows,
-    savedRows,
-    skippedNoScore,
-    unmatched,
-  });
+    savedMatchIds: (savedRows ?? []).map((row) => row.match_id),
+    skippedNoScoreIds: skippedNoScore.map((match) => match.footballDataId),
+    unmatchedIds: unmatched.map((match) => match.footballDataId),
+  };
+
+  response.status(200).json(
+    wantsDebug
+      ? { ...compactResponse, mapped: mappedRows, savedRows, skippedNoScore, unmatched }
+      : compactResponse,
+  );
 };

@@ -12,6 +12,7 @@ import {
   Lock,
   LogOut,
   Mail,
+  RefreshCw,
   Search,
   ShieldCheck,
   Trophy,
@@ -638,6 +639,21 @@ function App() {
   useEffect(() => {
     if (!isAdmin && activeTab === 'resultados') setActiveTab('quiniela');
   }, [activeTab, isAdmin]);
+
+  useEffect(() => {
+    if (!session) return undefined;
+
+    const refreshData = () => {
+      if (document.visibilityState === 'visible') loadAppData(session);
+    };
+
+    window.addEventListener('focus', refreshData);
+    document.addEventListener('visibilitychange', refreshData);
+    return () => {
+      window.removeEventListener('focus', refreshData);
+      document.removeEventListener('visibilitychange', refreshData);
+    };
+  }, [session]);
 
   const leaderboard = useMemo(() => {
     return users
@@ -1303,6 +1319,10 @@ function App() {
                 </p>
               </div>
               <div className="phase-actions">
+                <button className="icon-text ghost" type="button" onClick={() => loadAppData(session)}>
+                  <RefreshCw size={18} />
+                  Actualizar datos
+                </button>
                 <button
                   className={`icon-text ${notificationsEnabled ? 'success' : 'ghost'}`}
                   type="button"
