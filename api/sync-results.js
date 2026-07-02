@@ -48,6 +48,10 @@ const thirdPlaceMatchOverrides = {
   85: 'Algeria',
 };
 
+const resultOverridesByMatchId = {
+  82: { homeScore: 2, awayScore: 2, advancingTeam: 'Belgium' },
+};
+
 const normalizeTeam = (value) => {
   const normalized = String(value ?? '')
     .normalize('NFD')
@@ -536,6 +540,12 @@ module.exports = async function handler(request, response) {
       advancing_team: getAdvancingTeam(apiMatch, mapped),
       updated_at: new Date().toISOString(),
     };
+    const resultOverride = resultOverridesByMatchId[row.match_id];
+    if (resultOverride) {
+      row.home_score = resultOverride.homeScore;
+      row.away_score = resultOverride.awayScore;
+      row.advancing_team = resultOverride.advancingTeam;
+    }
 
     rows.push(row);
     mappedRows.push({
