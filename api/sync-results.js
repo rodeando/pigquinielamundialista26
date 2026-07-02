@@ -486,10 +486,21 @@ module.exports = async function handler(request, response) {
   const rows = [];
   const mappedRows = [];
   const unmatched = [];
+  const skippedNoScore = [];
 
   for (const apiMatch of payload.matches ?? []) {
     const score = getFinalScore(apiMatch);
-    if (!score) continue;
+    if (!score) {
+      skippedNoScore.push({
+        footballDataId: apiMatch.id,
+        utcDate: apiMatch.utcDate,
+        status: apiMatch.status,
+        home: apiMatch.homeTeam?.name,
+        away: apiMatch.awayTeam?.name,
+        score: apiMatch.score,
+      });
+      continue;
+    }
 
     const mapped = findLocalMatch(localMatches, apiMatch);
     if (!mapped) {
@@ -537,6 +548,7 @@ module.exports = async function handler(request, response) {
       updated: 0,
       footballDataMatches: payload.matches?.length ?? 0,
       mapped: mappedRows,
+      skippedNoScore,
       unmatched,
       message: 'No finished World Cup matches with mapped final scores were found.',
     });
@@ -560,6 +572,7 @@ module.exports = async function handler(request, response) {
     matchIds: rows.map((row) => row.match_id),
     mapped: mappedRows,
     savedRows,
+    skippedNoScore,
     unmatched,
   });
 };
