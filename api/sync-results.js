@@ -371,11 +371,26 @@ const findLocalMatch = (localMatches, apiMatch) => {
   return timeFallback ? { match: timeFallback, shouldSwapScore: false, method: 'time-fallback' } : null;
 };
 
-const getFinalScore = (apiMatch) => {
-  const score = apiMatch.score?.regularTime ?? apiMatch.score?.fullTime;
-  if (!Number.isFinite(score?.home) || !Number.isFinite(score?.away)) return null;
-  return score;
+const getScoreValue = (score, side) => {
+  const directValue = score?.[side];
+  if (Number.isFinite(directValue)) return directValue;
+
+  const teamValue = score?.[`${side}Team`];
+  if (Number.isFinite(teamValue)) return teamValue;
+
+  return null;
 };
+
+const normalizeScore = (score) => {
+  const home = getScoreValue(score, 'home');
+  const away = getScoreValue(score, 'away');
+  return Number.isFinite(home) && Number.isFinite(away) ? { home, away } : null;
+};
+
+const getFinalScore = (apiMatch) =>
+  normalizeScore(apiMatch.score?.regularTime) ??
+  normalizeScore(apiMatch.score?.fullTime) ??
+  normalizeScore(apiMatch.score?.extraTime);
 
 const getAdvancingTeam = (apiMatch, mapped) => {
   const score = getFinalScore(apiMatch);
@@ -385,8 +400,8 @@ const getAdvancingTeam = (apiMatch, mapped) => {
   if (winner === 'HOME_TEAM') return mapped.shouldSwapScore ? mapped.match.away : mapped.match.home;
   if (winner === 'AWAY_TEAM') return mapped.shouldSwapScore ? mapped.match.home : mapped.match.away;
 
-  const fullTime = apiMatch.score?.fullTime;
-  if (Number.isFinite(fullTime?.home) && Number.isFinite(fullTime?.away) && fullTime.home !== fullTime.away) {
+  const fullTime = normalizeScore(apiMatch.score?.fullTime) ?? normalizeScore(apiMatch.score?.extraTime);
+  if (fullTime && fullTime.home !== fullTime.away) {
     const apiHomeAdvanced = fullTime.home > fullTime.away;
     return apiHomeAdvanced === !mapped.shouldSwapScore ? mapped.match.home : mapped.match.away;
   }
