@@ -486,6 +486,48 @@ const resolveMatchTeams = (match, results, groupData, thirdAssignments) => ({
   away: resolveKnockoutTeam(match.away, results, groupData, thirdAssignments, match.id),
 });
 
+const getKnownTeams = () =>
+  new Set(MATCHES.filter((match) => match.group).flatMap((match) => [match.home, match.away]));
+
+const removeTeam = (teams, team) => {
+  const normalizedTeam = normalizeTeamName(team);
+  for (const currentTeam of teams) {
+    if (normalizeTeamName(currentTeam) === normalizedTeam) teams.delete(currentTeam);
+  }
+};
+
+const getAliveTeams = (resolvedMatches, results) => {
+  const aliveTeams = getKnownTeams();
+
+  resolvedMatches
+    .filter((match) => isKnockoutMatch(match) && hasCompleteResult(match, results[match.id]))
+    .sort((a, b) => a.id - b.id)
+    .forEach((match) => {
+      const result = results[match.id];
+      const outcome = getOutcome(result.homeScore, result.awayScore);
+      const winner =
+        outcome === 'home'
+          ? match.home
+          : outcome === 'away'
+            ? match.away
+            : result.advancingTeam;
+      const loser = normalizeTeamName(winner) === normalizeTeamName(match.home) ? match.away : match.home;
+      removeTeam(aliveTeams, loser);
+    });
+
+  return aliveTeams;
+};
+
+const getBonusStatus = (fieldKey, value, aliveTeams) => {
+  if (!value) return { label: 'Sin captura', status: 'pending' };
+  if (fieldKey !== 'worldChampion') return { label: 'Validar jugador', status: 'pending' };
+
+  const selectedTeam = [...aliveTeams].find((team) => normalizeTeamName(team) === normalizeTeamName(value));
+  return selectedTeam
+    ? { label: 'Vivo', status: 'alive' }
+    : { label: 'Descartado', status: 'out' };
+};
+
 const monthMap = {
   enero: '01',
   febrero: '02',
@@ -1299,6 +1341,7 @@ function App() {
         <BonusPicksPanel
           users={users}
           bonusPicks={bonusPicks}
+          results={results}
           currentPick={bonusPicks[currentUser.id] ?? {}}
           locked={bonusLocked}
           onSave={updateBonusPick}
@@ -1437,10 +1480,17 @@ function App() {
   );
 }
 
-function BonusPicksPanel({ users, bonusPicks, currentPick, locked, onSave }) {
+function BonusPicksPanel({ users, bonusPicks, results, currentPick, locked, onSave }) {
   const [draft, setDraft] = useState(currentPick);
   const [notice, setNotice] = useState('');
   const sortedUsers = [...users].sort((a, b) => a.name.localeCompare(b.name));
+  const groupData = useMemo(() => buildGroupStandings(results), [results]);
+  const thirdAssignments = useMemo(() => assignThirdPlaceSlots(groupData), [groupData]);
+  const resolvedMatches = useMemo(
+    () => MATCHES.map((match) => resolveMatchTeams(match, results, groupData, thirdAssignments)),
+    [groupData, results, thirdAssignments],
+  );
+  const aliveTeams = useMemo(() => getAliveTeams(resolvedMatches, results), [resolvedMatches, results]);
 
   useEffect(() => {
     setDraft(currentPick);
@@ -1520,9 +1570,15 @@ function BonusPicksPanel({ users, bonusPicks, currentPick, locked, onSave }) {
               return (
                 <div className="bonus-table-row" key={user.email}>
                   <strong>{user.name}</strong>
-                  {bonusFields.map((field) => (
-                    <span key={field.key}>{pick[field.key] || 'Sin captura'}</span>
-                  ))}
+                  {bonusFields.map((field) => {
+                    const status = getBonusStatus(field.key, pick[field.key], aliveTeams);
+                    return (
+                      <span key={field.key} className="bonus-pick-cell">
+                        <b>{pick[field.key] || 'Sin captura'}</b>
+                        {pick[field.key] && <small className={`bonus-status ${status.status}`}>{status.label}</small>}
+                      </span>
+                    );
+                  })}
                 </div>
               );
             })}
