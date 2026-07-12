@@ -807,39 +807,6 @@ select {
   font-weight: 900;
 }
 
-.bonus-pick-cell {
-  display: grid;
-  gap: 5px;
-}
-
-.bonus-pick-cell b {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.bonus-status {
-  width: fit-content;
-  border-radius: 999px;
-  padding: 4px 8px;
-  font-size: 0.72rem;
-  font-weight: 900;
-}
-
-.bonus-status.alive {
-  background: #dbece8;
-  color: #1f7a6f;
-}
-
-.bonus-status.out {
-  background: #f6ded8;
-  color: #a63d2c;
-}
-
-.bonus-status.pending {
-  background: #edf0eb;
-  color: #59645f;
-}
-
 .leaderboard-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
