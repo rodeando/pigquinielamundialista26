@@ -807,6 +807,10 @@ select {
   font-weight: 900;
 }
 
+.bonus-table-row span.bonus-eliminated {
+  color: #b4332c;
+}
+
 .leaderboard-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;

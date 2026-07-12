@@ -67,6 +67,12 @@ const bonusFields = [
   },
 ];
 
+const eliminatedBonusPicks = {
+  worldChampion: ['Alemania', 'Germany'],
+  topScorer: ['Haaland', 'Halaand', 'Erling Haaland'],
+  bestGoalkeeper: ['Neuer', 'Manuel Neuer', 'Bart Verbruggen'],
+};
+
 const readStorage = (key, fallback) => {
   try {
     return JSON.parse(localStorage.getItem(key)) ?? fallback;
@@ -87,6 +93,16 @@ const normalizeTeamName = (value) =>
     .replace(/&/g, 'and')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+
+const normalizeBonusValue = (value) => normalizeTeamName(value);
+
+const isEliminatedBonusPick = (fieldKey, value) => {
+  const normalizedValue = normalizeBonusValue(value);
+  if (!normalizedValue) return false;
+  return (eliminatedBonusPicks[fieldKey] ?? []).some(
+    (eliminatedValue) => normalizeBonusValue(eliminatedValue) === normalizedValue,
+  );
+};
 
 const getSessionProfile = (activeSession) => {
   const email = normalizeEmail(activeSession?.user?.email ?? '');
@@ -1520,9 +1536,15 @@ function BonusPicksPanel({ users, bonusPicks, currentPick, locked, onSave }) {
               return (
                 <div className="bonus-table-row" key={user.email}>
                   <strong>{user.name}</strong>
-                  {bonusFields.map((field) => (
-                    <span key={field.key}>{pick[field.key] || 'Sin captura'}</span>
-                  ))}
+                  {bonusFields.map((field) => {
+                    const value = pick[field.key] || 'Sin captura';
+                    const isEliminated = isEliminatedBonusPick(field.key, pick[field.key]);
+                    return (
+                      <span key={field.key} className={isEliminated ? 'bonus-eliminated' : ''}>
+                        {value}
+                      </span>
+                    );
+                  })}
                 </div>
               );
             })}
