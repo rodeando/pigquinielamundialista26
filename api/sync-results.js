@@ -51,6 +51,7 @@ const thirdPlaceMatchOverrides = {
 const resultOverridesByMatchId = {
   82: { homeScore: 2, awayScore: 2, advancingTeam: 'Belgium' },
   99: { homeScore: 1, awayScore: 1, advancingTeam: 'England' },
+  100: { homeScore: 1, awayScore: 1, advancingTeam: 'Argentina' },
 };
 
 const normalizeTeam = (value) => {
