@@ -68,8 +68,8 @@ const bonusFields = [
 ];
 
 const eliminatedBonusPicks = {
-  worldChampion: ['Alemania', 'Germany', 'Francia', 'France'],
-  topScorer: ['Haaland', 'Haland', 'Halaand', 'Erling Haaland'],
+  worldChampion: ['Alemania', 'Germany', 'Francia', 'France', 'Inglaterra', 'England'],
+  topScorer: ['Haaland', 'Haland', 'Halaand', 'Erling Haaland', 'Harry Kane', 'Harri Kane'],
   bestGoalkeeper: ['Neuer', 'Manuel Neuer', 'Bart Verbruggen'],
 };
 
