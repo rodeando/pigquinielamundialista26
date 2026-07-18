@@ -108,10 +108,22 @@ using (auth.uid() = id)
 with check (auth.uid() = id);
 
 drop policy if exists "Picks are visible to authenticated users" on public.picks;
-create policy "Picks are visible to authenticated users"
+drop policy if exists "Users can see their own picks" on public.picks;
+create policy "Users can see their own picks"
 on public.picks for select
 to authenticated
-using (true);
+using (auth.uid() = user_id);
+
+drop policy if exists "Admins can see all picks" on public.picks;
+create policy "Admins can see all picks"
+on public.picks for select
+to authenticated
+using (
+  exists (
+    select 1 from public.admin_users
+    where lower(admin_users.email) = lower(auth.jwt() ->> 'email')
+  )
+);
 
 drop policy if exists "Users can insert their picks" on public.picks;
 create policy "Users can insert their picks"

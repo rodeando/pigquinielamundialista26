@@ -527,6 +527,27 @@ const getMatchStartDate = (match) => {
 
 const hasMatchStarted = (match, now = Date.now()) => now >= getMatchStartDate(match).getTime();
 
+const fetchVisiblePicks = async (activeSession) => {
+  if (!activeSession?.access_token) return { data: [], error: null };
+
+  try {
+    const response = await fetch('/api/visible-picks', {
+      headers: {
+        Authorization: `Bearer ${activeSession.access_token}`,
+      },
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      return { data: [], error: { message: payload.error ?? 'No se pudieron cargar los picks visibles.' } };
+    }
+
+    return { data: payload.picks ?? [], error: null };
+  } catch (error) {
+    return { data: [], error: { message: error.message } };
+  }
+};
+
 const getMatchEndDate = (match) =>
   new Date(getMatchStartDate(match).getTime() + MATCH_DURATION_MINUTES * 60 * 1000);
 
@@ -728,9 +749,16 @@ function App() {
     const adminQuery = normalizedSessionEmail
       ? supabase.from('admin_users').select('email').ilike('email', normalizedSessionEmail).maybeSingle()
       : Promise.resolve({ data: null });
-    let [profilesResult, picksResult, bonusResult, resultsResult, settingsResult, adminResult] = await Promise.all([
+    const ownPicksQuery = sessionProfile?.id
+      ? supabase
+          .from('picks')
+          .select('user_id,match_id,outcome,home_score,away_score,advancing_team')
+          .eq('user_id', sessionProfile.id)
+      : Promise.resolve({ data: [] });
+    let [profilesResult, picksResult, visiblePicksResult, bonusResult, resultsResult, settingsResult, adminResult] = await Promise.all([
       supabase.from('profiles').select('id,email,name').order('name'),
-      supabase.from('picks').select('user_id,match_id,outcome,home_score,away_score,advancing_team'),
+      ownPicksQuery,
+      fetchVisiblePicks(activeSession),
       supabase.from('bonus_picks').select('user_id,world_champion,top_scorer,best_goalkeeper'),
       supabase.from('results').select('match_id,home_score,away_score,advancing_team'),
       supabase.from('app_settings').select('key,value').eq('key', 'unlocked_phase').limit(1),
@@ -738,7 +766,9 @@ function App() {
     ]);
 
     if (picksResult.error?.message?.includes('advancing_team')) {
-      picksResult = await supabase.from('picks').select('user_id,match_id,outcome,home_score,away_score');
+      picksResult = sessionProfile?.id
+        ? await supabase.from('picks').select('user_id,match_id,outcome,home_score,away_score').eq('user_id', sessionProfile.id)
+        : { data: [] };
     }
 
     if (resultsResult.error?.message?.includes('advancing_team')) {
@@ -748,6 +778,7 @@ function App() {
     const queryResults = {
       profiles: profilesResult,
       picks: picksResult,
+      visible_picks: visiblePicksResult,
       bonus_picks: bonusResult,
       results: resultsResult,
       app_settings: settingsResult,
@@ -763,8 +794,13 @@ function App() {
     }
     const usersById = Object.fromEntries(nextUsers.map((user) => [user.id, user]));
     const nextPicks = {};
+    const pickRowsByKey = new Map();
 
-    for (const row of picksResult.data ?? []) {
+    for (const row of [...(visiblePicksResult.data ?? []), ...(picksResult.data ?? [])]) {
+      pickRowsByKey.set(`${row.user_id}:${row.match_id}`, row);
+    }
+
+    for (const row of pickRowsByKey.values()) {
       const user = usersById[row.user_id];
       if (!user) continue;
       nextPicks[user.id] ??= {};
