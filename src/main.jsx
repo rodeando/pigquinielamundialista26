@@ -70,7 +70,11 @@ const bonusFields = [
 const eliminatedBonusPicks = {
   worldChampion: ['Alemania', 'Germany', 'Francia', 'France', 'Inglaterra', 'England'],
   topScorer: ['Haaland', 'Haland', 'Halaand', 'Erling Haaland', 'Harry Kane', 'Harri Kane'],
-  bestGoalkeeper: ['Neuer', 'Manuel Neuer', 'Bart Verbruggen'],
+};
+
+const finalBonusWinners = {
+  topScorer: ['Kylian Mbappe', 'Kilian Mbappe'],
+  bestGoalkeeper: ['Unai Simon', 'Unai Simón'],
 };
 
 const readStorage = (key, fallback) => {
@@ -99,6 +103,10 @@ const normalizeBonusValue = (value) => normalizeTeamName(value);
 const isEliminatedBonusPick = (fieldKey, value) => {
   const normalizedValue = normalizeBonusValue(value);
   if (!normalizedValue) return false;
+  const finalWinners = finalBonusWinners[fieldKey] ?? [];
+  if (finalWinners.length) {
+    return !finalWinners.some((winner) => normalizeBonusValue(winner) === normalizedValue);
+  }
   return (eliminatedBonusPicks[fieldKey] ?? []).some(
     (eliminatedValue) => normalizeBonusValue(eliminatedValue) === normalizedValue,
   );
