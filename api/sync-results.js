@@ -52,6 +52,7 @@ const resultOverridesByMatchId = {
   82: { homeScore: 2, awayScore: 2, advancingTeam: 'Belgium' },
   99: { homeScore: 1, awayScore: 1, advancingTeam: 'England' },
   100: { homeScore: 1, awayScore: 1, advancingTeam: 'Argentina' },
+  104: { homeScore: 0, awayScore: 0, advancingTeam: 'Spain' },
 };
 
 const normalizeTeam = (value) => {
