@@ -73,7 +73,7 @@ const eliminatedBonusPicks = {
 };
 
 const finalBonusWinners = {
-  topScorer: ['Kylian Mbappe', 'Kilian Mbappe'],
+  topScorer: ['Embappe', 'Mbappe', 'Kylian Mbappe', 'Kilian Mbappe', 'Kilyan Mbappe'],
   bestGoalkeeper: ['Unai Simon', 'Unai Simón'],
 };
 
